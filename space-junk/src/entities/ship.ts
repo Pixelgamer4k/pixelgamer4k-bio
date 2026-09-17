@@ -2,11 +2,17 @@ import * as THREE from 'three';
 import { damp, clamp } from '../util/math';
 import type { InputState } from '../systems/input';
 import type { CollisionWorld } from '../systems/collision';
-import { loadGlb, paintPioneerLivery, ASSET } from '../assets/loader';
+import {
+  loadGlb,
+  paintPioneerLivery,
+  centerAndOrientCraft,
+  detectHullHardpoints,
+  ASSET,
+} from '../assets/loader';
 
 /**
  * Pioneer MK-I — white/red storefront livery.
- * Roots for VFX: shipRoot, thrusterRoot, magnetRoot, hitchOverlay
+ * Stable VFX roots: shipRoot, thrusterRoot (3 nozzles), magnetRoot (under-nose)
  *
  * Flight: W/S thrust along nose · A/D strafe · mouse/look pad pitch+yaw · bank into turns · Space boost
  */
@@ -34,6 +40,7 @@ export class Ship {
   /** Hard red hitch flash — collision only, no soft fade. */
   hitchFlash = 0;
   private thrusters: THREE.Mesh[] = [];
+  private thrusterFlames: THREE.Mesh[] = [];
   private shieldMesh!: THREE.Mesh;
   private hitchOverlay!: THREE.Mesh;
   private trail: THREE.Points | null = null;
@@ -44,8 +51,10 @@ export class Ship {
   private right = new THREE.Vector3();
   private up = new THREE.Vector3();
   private tmp = new THREE.Vector3();
+  private tmpW = new THREE.Vector3();
   private ready = false;
   private bank = 0;
+  private nozzleLocals: THREE.Vector3[] = [];
 
   constructor() {
     this.group.name = 'pioneerMkI';
@@ -85,31 +94,116 @@ export class Ship {
 
     // Placeholder until GLB loads
     this.shipRoot.add(this.buildFallbackMesh());
+    this.attachHardpoints(
+      [
+        new THREE.Vector3(-0.55, -0.12, 1.35),
+        new THREE.Vector3(0, -0.12, 1.35),
+        new THREE.Vector3(0.55, -0.12, 1.35),
+      ],
+      new THREE.Vector3(0, -0.55, -0.7),
+    );
   }
 
   async loadVisual() {
     try {
-      const mesh = await loadGlb(ASSET.miner);
-      paintPioneerLivery(mesh);
-      mesh.scale.setScalar(1.35);
-      mesh.rotation.y = Math.PI; // nose toward -Z
+      const raw = await loadGlb(ASSET.miner);
+      paintPioneerLivery(raw);
+      const orient = centerAndOrientCraft(raw, 1.35);
+      const hp = detectHullHardpoints(orient);
+
       // Clear previous hull meshes; keep VFX roots
       for (const c of [...this.shipRoot.children]) {
         if (c !== this.thrusterRoot && c !== this.magnetRoot) this.shipRoot.remove(c);
       }
-      this.shipRoot.add(mesh);
+      this.shipRoot.add(orient);
       if (!this.shipRoot.children.includes(this.thrusterRoot)) this.shipRoot.add(this.thrusterRoot);
       if (!this.shipRoot.children.includes(this.magnetRoot)) this.shipRoot.add(this.magnetRoot);
-      this.buildThrusterVfx();
-      this.buildMagnetVfx();
+
+      this.clearVfxChildren();
+      this.attachHardpoints(hp.nozzles, hp.magnet);
       this.buildTrail();
       this.ready = true;
     } catch {
-      this.buildThrusterVfx();
-      this.buildMagnetVfx();
+      this.clearVfxChildren();
+      this.attachHardpoints(
+        [
+          new THREE.Vector3(-0.55, -0.12, 1.35),
+          new THREE.Vector3(0, -0.12, 1.35),
+          new THREE.Vector3(0.55, -0.12, 1.35),
+        ],
+        new THREE.Vector3(0, -0.55, -0.7),
+      );
       this.buildTrail();
       this.ready = true;
     }
+  }
+
+  private clearVfxChildren() {
+    while (this.thrusterRoot.children.length) this.thrusterRoot.remove(this.thrusterRoot.children[0]);
+    while (this.magnetRoot.children.length) this.magnetRoot.remove(this.magnetRoot.children[0]);
+    this.thrusters = [];
+    this.thrusterFlames = [];
+  }
+
+  /** Place thrusterRoot nozzles + magnetRoot on hull hardpoints (shipRoot local). */
+  private attachHardpoints(nozzles: THREE.Vector3[], magnet: THREE.Vector3) {
+    this.nozzleLocals = nozzles.map((n) => n.clone());
+    this.thrusterRoot.position.set(0, 0, 0);
+    this.magnetRoot.position.copy(magnet);
+
+    const glowMat = new THREE.MeshStandardMaterial({
+      color: 0x3ad0ff,
+      emissive: 0x1a88cc,
+      emissiveIntensity: 0.95,
+      roughness: 0.25,
+      metalness: 0.1,
+      transparent: true,
+      opacity: 0.95,
+      depthWrite: false,
+    });
+    const flameMat = new THREE.MeshBasicMaterial({
+      color: 0x66e8ff,
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+
+    this.thrusters = [];
+    this.thrusterFlames = [];
+    nozzles.forEach((pos, i) => {
+      const socket = new THREE.Group();
+      socket.name = `nozzle_${i}`;
+      socket.position.copy(pos);
+      // Cone points aft (+Z) — tip sits on socket, body extends behind
+      const glow = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.55, 10), glowMat.clone());
+      glow.rotation.x = Math.PI; // base at socket, tip toward +Z aft
+      glow.position.z = 0.28;
+      glow.name = `thrusterGlow_${i}`;
+      socket.add(glow);
+      this.thrusters.push(glow);
+
+      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.85, 8), flameMat.clone());
+      flame.rotation.x = Math.PI;
+      flame.position.z = 0.42;
+      flame.name = `thrusterFlame_${i}`;
+      socket.add(flame);
+      this.thrusterFlames.push(flame);
+
+      this.thrusterRoot.add(socket);
+    });
+
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.32, 0.045, 6, 18),
+      new THREE.MeshStandardMaterial({
+        color: 0x3ad0ff,
+        emissive: 0x2288aa,
+        emissiveIntensity: 0.75,
+      }),
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.name = 'magnetRing';
+    this.magnetRoot.add(ring);
   }
 
   private buildFallbackMesh(): THREE.Group {
@@ -128,35 +222,13 @@ export class Ship {
     return g;
   }
 
-  private buildThrusterVfx() {
-    const thrusterMat = new THREE.MeshStandardMaterial({
-      color: 0x3ad0ff,
-      emissive: 0x1a88cc,
-      emissiveIntensity: 0.9,
-      roughness: 0.3,
-    });
-    this.thrusters = [];
-    for (const ox of [-0.45, 0, 0.45]) {
-      const glow = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.7, 8), thrusterMat.clone());
-      glow.rotation.x = Math.PI;
-      glow.position.set(ox, -0.05, 1.35);
-      this.thrusterRoot.add(glow);
-      this.thrusters.push(glow);
-    }
-  }
-
-  private buildMagnetVfx() {
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.35, 0.05, 6, 16),
-      new THREE.MeshStandardMaterial({ color: 0x3ad0ff, emissive: 0x2288aa, emissiveIntensity: 0.7 }),
-    );
-    ring.rotation.x = Math.PI / 2;
-    ring.position.set(0, -0.55, -0.6);
-    ring.name = 'magnetRing';
-    this.magnetRoot.add(ring);
-  }
-
   private buildTrail() {
+    if (this.trail) {
+      this.group.remove(this.trail);
+      this.trail.geometry.dispose();
+      (this.trail.material as THREE.Material).dispose();
+      this.trail = null;
+    }
     const n = 48;
     this.trailPos = new Float32Array(n * 3);
     const geo = new THREE.BufferGeometry();
@@ -165,7 +237,7 @@ export class Ship {
       geo,
       new THREE.PointsMaterial({
         color: 0x3ad0ff,
-        size: 0.22,
+        size: 0.2,
         transparent: true,
         opacity: 0.65,
         depthWrite: false,
@@ -178,6 +250,12 @@ export class Ship {
 
   get position() {
     return this.group.position;
+  }
+
+  /** World-space under-nose magnet hardpoint (for salvage beam). */
+  getMagnetWorld(out = this.tmpW) {
+    this.magnetRoot.getWorldPosition(out);
+    return out;
   }
 
   getForward(out = this.forward) {
@@ -276,26 +354,44 @@ export class Ship {
     this.stretch = damp(this.stretch, stretchT, 10, dt);
     this.shipRoot.scale.set(1 / Math.sqrt(this.stretch), 1 / Math.sqrt(this.stretch), this.stretch);
 
-    for (const t of this.thrusters) {
-      const m = t.material as THREE.MeshStandardMaterial;
-      const base = this.boosting ? 1.5 : 0.5 + Math.min(1, this.velocity.length() / 22) * 0.55;
-      m.emissiveIntensity = base + Math.sin(performance.now() * 0.02 + t.position.x) * 0.12;
-      t.scale.setScalar(this.boosting ? 1.4 : 0.85 + Math.min(1, this.velocity.length() / 30) * 0.4);
-      t.visible = true;
+    const speed = this.velocity.length();
+    const idle = 0.5 + Math.min(1, speed / 22) * 0.55;
+    const t = performance.now() * 0.02;
+    for (let i = 0; i < this.thrusters.length; i++) {
+      const glow = this.thrusters[i];
+      const flame = this.thrusterFlames[i];
+      const m = glow.material as THREE.MeshStandardMaterial;
+      const base = this.boosting ? 1.55 : idle;
+      m.emissiveIntensity = base + Math.sin(t + i * 1.7) * 0.14;
+      const len = this.boosting ? 1.55 : 0.8 + Math.min(1, speed / 30) * 0.45;
+      glow.scale.set(this.boosting ? 1.15 : 1, len, this.boosting ? 1.15 : 1);
+      glow.visible = true;
+      if (flame) {
+        const fm = flame.material as THREE.MeshBasicMaterial;
+        fm.opacity = this.boosting ? 0.75 : 0.28 + Math.min(0.35, speed / 40);
+        flame.scale.set(1, this.boosting ? 1.7 : 0.9 + Math.min(0.5, speed / 35), 1);
+        flame.visible = true;
+      }
     }
 
-    // Thruster trail points
-    if (this.trail && this.trailPos) {
-      const back = this.getForward().multiplyScalar(-1.6);
-      const p = this.group.position;
-      const i = this.trailIdx % 48;
-      this.trailPos[i * 3] = p.x + back.x;
-      this.trailPos[i * 3 + 1] = p.y + back.y - 0.1;
-      this.trailPos[i * 3 + 2] = p.z + back.z;
-      this.trailIdx++;
-      (this.trail.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-      const mat = this.trail.material as THREE.PointsMaterial;
-      mat.opacity = this.boosting ? 0.85 : 0.35 + Math.min(0.4, this.velocity.length() / 40);
+    // Trail samples from real nozzle world positions (cycle across 3)
+    if (this.trail && this.trailPos && this.nozzleLocals.length) {
+      const ni = this.trailIdx % this.nozzleLocals.length;
+      const socket = this.thrusterRoot.children[ni];
+      if (socket) {
+        socket.getWorldPosition(this.tmpW);
+        // Emit slightly aft of nozzle (do not mutate shared forward)
+        const aft = this.getForward(this.tmp).multiplyScalar(-0.35);
+        this.tmpW.add(aft);
+        const i = this.trailIdx % 48;
+        this.trailPos[i * 3] = this.tmpW.x;
+        this.trailPos[i * 3 + 1] = this.tmpW.y;
+        this.trailPos[i * 3 + 2] = this.tmpW.z;
+        this.trailIdx++;
+        (this.trail.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+        const mat = this.trail.material as THREE.PointsMaterial;
+        mat.opacity = this.boosting ? 0.85 : 0.35 + Math.min(0.4, speed / 40);
+      }
     }
 
     // Hard hitch: full red while timer > 0, then hard cut to 0

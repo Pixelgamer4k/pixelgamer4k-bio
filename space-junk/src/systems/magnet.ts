@@ -59,7 +59,8 @@ export class MagnetBeam {
     this.particles.visible = holding;
     if (!holding) return null as SalvagePiece | null;
 
-    const origin = ship.position.clone().add(new THREE.Vector3(0, -0.35, 0));
+    // Beam originates at under-nose magnetRoot hardpoint (ship-local → world)
+    const origin = ship.getMagnetWorld(new THREE.Vector3()).clone();
     const forward = ship.getForward().clone();
     const end = origin.clone().addScaledVector(forward, this.range);
 
@@ -84,7 +85,7 @@ export class MagnetBeam {
       if (along < 0.5 || along > this.range) continue;
       const closest = origin.clone().addScaledVector(forward, along);
       const lateral = p.mesh.position.distanceTo(closest);
-      if (lateral > 3.8) continue;
+      if (lateral > 4.4) continue;
       const score = lateral + along * 0.05;
       if (score < bestScore) {
         bestScore = score;
@@ -112,7 +113,7 @@ export class MagnetBeam {
       }
       (this.particles.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
 
-      if (d < ship.radius + best.radius + 0.6) return best;
+      if (d < ship.radius + best.radius + 1.0) return best;
     } else {
       (this.line.material as THREE.LineBasicMaterial).color.setHex(0x3ad0ff);
       for (const p of pieces) p.pulled = false;

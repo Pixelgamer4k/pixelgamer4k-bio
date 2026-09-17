@@ -63,10 +63,11 @@ export class Zone1 {
     scene.add(z.drones.group);
 
     // Power cells at varied altitudes — reach-and-grab in 3D
+    // Outside keepFlying AABBs (hull ±16×-4..12×-50..-34, wing ±22×-5..0×-48..-36)
     const cellSpots = [
-      new THREE.Vector3(-8, 8, -38),
-      new THREE.Vector3(14, -6, -48),
-      new THREE.Vector3(4, 14, -28),
+      new THREE.Vector3(-22, 10, -30),
+      new THREE.Vector3(24, -2, -52),
+      new THREE.Vector3(6, 16, -22),
     ];
     for (let i = 0; i < 3; i++) {
       const p = cellSpots[i].clone().add(new THREE.Vector3(randRange(-2, 2), randRange(-1, 1), randRange(-2, 2)));
@@ -108,6 +109,16 @@ export class Zone1 {
 
   update(dt: number, shipPos: THREE.Vector3) {
     this.debris.update(dt);
+    // Procedural debris / satellite spin (Animation Artist retargets same roots later)
+    if (this.debrisRoot) {
+      this.debrisRoot.traverse((o) => {
+        const spin = o.userData?.spin as THREE.Vector3 | undefined;
+        if (!spin) return;
+        o.rotation.x += spin.x * dt;
+        o.rotation.y += spin.y * dt;
+        o.rotation.z += spin.z * dt;
+      });
+    }
     if (this.beat === 'intro' && shipPos.length() > 6) this.beat = 'collect';
 
     if (this.beat === 'drones' && this.drones.aliveCount() === 0) {

@@ -59,33 +59,59 @@ export async function buildZone1Environment(scene: THREE.Scene): Promise<EnvBuil
   atmos.position.copy(planet.position);
   scene.add(atmos);
 
-  // Prefetch common meshes
+  // Prefetch common meshes (extra Kenney props for denser Zone 1)
   const [
-    meteor, meteorD, rockA, rockB, rockS, barrel, hangar, structure, structureD,
-    dish, platform, cargo, speeder, rocketBase, rocketTop, rocketFins, hangarRound,
+    meteor, meteorD, rockA, rockB, rockS, rockCrystal,
+    barrel, barrelsRail, hangar, hangarB, hangarGlass, structure, structureD, structureDiag,
+    dish, dishSmall, platform, platformHigh, cargo, speeder, speederC,
+    rocketBase, rocketTop, rocketFins, hangarRound,
+    generator, trainCargo, trainBox, rover, gate, corridorDet, corridorOpen,
   ] = await Promise.all([
     loadGlb(ASSET.meteor),
     loadGlb(ASSET.meteorDetailed),
     loadGlb(ASSET.rockLargeA),
     loadGlb(ASSET.rockLargeB),
     loadGlb(ASSET.rocksSmallA),
+    loadGlb(ASSET.rockCrystalB),
     loadGlb(ASSET.barrel),
+    loadGlb(ASSET.barrelsRail),
     loadGlb(ASSET.hangarLarge),
+    loadGlb(ASSET.hangarLargeB),
+    loadGlb(ASSET.hangarRoundGlass),
     loadGlb(ASSET.structure),
     loadGlb(ASSET.structureDetailed),
+    loadGlb(ASSET.structureDiagonal),
     loadGlb(ASSET.dishLarge),
+    loadGlb(ASSET.dish),
     loadGlb(ASSET.platformLarge),
+    loadGlb(ASSET.platformHigh),
     loadGlb(ASSET.cargoA),
     loadGlb(ASSET.speederB),
+    loadGlb(ASSET.speederC),
     loadGlb(ASSET.rocketBase),
     loadGlb(ASSET.rocketTop),
     loadGlb(ASSET.rocketFins),
     loadGlb(ASSET.hangarRound),
+    loadGlb(ASSET.machineGenerator),
+    loadGlb(ASSET.trainCargo),
+    loadGlb(ASSET.trainBox),
+    loadGlb(ASSET.rover),
+    loadGlb(ASSET.gateComplex),
+    loadGlb(ASSET.corridorDetailed),
+    loadGlb(ASSET.corridorOpen),
   ]);
 
+  const markSpin = (obj: THREE.Object3D, speed = 1) => {
+    obj.userData.spin = new THREE.Vector3(
+      randRange(-0.25, 0.25) * speed,
+      randRange(-0.4, 0.4) * speed,
+      randRange(-0.2, 0.2) * speed,
+    );
+  };
+
   // Asteroid field — meaningful size get colliders
-  const rockProtos = [meteor, meteorD, rockA, rockB, rockS];
-  for (let i = 0; i < 48; i++) {
+  const rockProtos = [meteor, meteorD, rockA, rockB, rockS, rockCrystal];
+  for (let i = 0; i < 56; i++) {
     const proto = rockProtos[i % rockProtos.length];
     const rock = proto.clone(true);
     const s = randRange(1.8, 6.5);
@@ -94,46 +120,80 @@ export async function buildZone1Environment(scene: THREE.Scene): Promise<EnvBuil
     if (rock.position.length() < 22) rock.position.setLength(24 + Math.random() * 10);
     rock.rotation.set(randRange(0, 6), randRange(0, 6), randRange(0, 6));
     rock.name = `asteroid_${i}`;
+    markSpin(rock, 0.6);
     debrisRoot.add(rock);
     if (s > 2.4) world.addMeshBounds(rock, 0.2, rock.name);
   }
 
-  // Barrels / containers floating
-  for (let i = 0; i < 22; i++) {
+  // Barrels / containers / cargo pods floating
+  for (let i = 0; i < 18; i++) {
     const b = barrel.clone(true);
     b.scale.setScalar(randRange(1.2, 2.2));
     b.position.set(randRange(-70, 70), randRange(-28, 28), randRange(-70, 70));
     if (b.position.length() < 18) b.position.setLength(20);
     b.rotation.y = randRange(0, Math.PI);
     b.name = `barrel_${i}`;
+    markSpin(b, 1.2);
     debrisRoot.add(b);
+  }
+  for (let i = 0; i < 10; i++) {
+    const c = (i % 2 === 0 ? trainCargo : trainBox).clone(true);
+    c.scale.setScalar(randRange(1.1, 1.8));
+    c.position.set(randRange(-75, 75), randRange(-22, 26), randRange(-75, 75));
+    if (c.position.length() < 20) c.position.setLength(22);
+    c.rotation.set(randRange(-0.3, 0.3), randRange(0, 6), randRange(-0.2, 0.2));
+    c.name = `container_${i}`;
+    markSpin(c, 0.5);
+    debrisRoot.add(c);
+    world.addMeshBounds(c, 0.25, c.name);
+  }
+  for (let i = 0; i < 6; i++) {
+    const r = barrelsRail.clone(true);
+    r.scale.setScalar(randRange(1.3, 2.0));
+    r.position.set(randRange(-60, 60), randRange(-18, 20), randRange(-60, 60));
+    if (r.position.length() < 16) r.position.setLength(18);
+    r.name = `barrelsRail_${i}`;
+    markSpin(r, 0.8);
+    debrisRoot.add(r);
   }
 
   // Derelict ships (visual wrecks)
-  for (let i = 0; i < 6; i++) {
-    const w = (i % 2 === 0 ? cargo : speeder).clone(true);
+  const wreckProtos = [cargo, speeder, speederC, rover];
+  for (let i = 0; i < 8; i++) {
+    const w = wreckProtos[i % wreckProtos.length].clone(true);
     w.scale.setScalar(randRange(1.4, 2.4));
     w.position.set(randRange(-65, 65), randRange(-20, 22), randRange(-65, 65));
     if (w.position.length() < 25) w.position.setLength(28);
     w.rotation.set(randRange(-0.4, 0.4), randRange(0, 6), randRange(-0.3, 0.3));
     w.name = `wreckShip_${i}`;
+    markSpin(w, 0.2);
     debrisRoot.add(w);
     world.addMeshBounds(w, 0.3, w.name);
   }
 
-  // Station pieces away from spawn
-  const stations: { mesh: THREE.Group; pos: THREE.Vector3; scale: number }[] = [
+  // Station pieces / satellites / modules away from spawn
+  const stations: { mesh: THREE.Group; pos: THREE.Vector3; scale: number; spinY?: number }[] = [
     { mesh: hangar.clone(true), pos: new THREE.Vector3(45, -2, -30), scale: 2.2 },
+    { mesh: hangarB.clone(true), pos: new THREE.Vector3(-58, 2, 28), scale: 1.8 },
     { mesh: hangarRound.clone(true), pos: new THREE.Vector3(-50, 4, 20), scale: 2.0 },
+    { mesh: hangarGlass.clone(true), pos: new THREE.Vector3(42, 6, 48), scale: 1.7 },
     { mesh: structureD.clone(true), pos: new THREE.Vector3(30, 8, 40), scale: 2.5 },
     { mesh: structure.clone(true), pos: new THREE.Vector3(-35, -6, -55), scale: 2.2 },
+    { mesh: structureDiag.clone(true), pos: new THREE.Vector3(18, -8, 55), scale: 2.0 },
     { mesh: platform.clone(true), pos: new THREE.Vector3(55, 12, 10), scale: 3.0 },
-    { mesh: dish.clone(true), pos: new THREE.Vector3(-20, 15, 50), scale: 2.0 },
+    { mesh: platformHigh.clone(true), pos: new THREE.Vector3(-62, 8, -12), scale: 2.2 },
+    { mesh: dish.clone(true), pos: new THREE.Vector3(-20, 15, 50), scale: 2.0, spinY: 0.35 },
+    { mesh: dishSmall.clone(true), pos: new THREE.Vector3(28, 18, -60), scale: 2.4, spinY: -0.45 },
+    { mesh: generator.clone(true), pos: new THREE.Vector3(60, -4, -40), scale: 2.0 },
+    { mesh: gate.clone(true), pos: new THREE.Vector3(-40, 0, 55), scale: 2.2 },
+    { mesh: corridorDet.clone(true), pos: new THREE.Vector3(12, 5, 62), scale: 2.5 },
+    { mesh: corridorOpen.clone(true), pos: new THREE.Vector3(-15, -3, -68), scale: 2.3 },
   ];
   for (const s of stations) {
     s.mesh.scale.setScalar(s.scale);
     s.mesh.position.copy(s.pos);
     s.mesh.rotation.y = randRange(0, Math.PI);
+    if (s.spinY) s.mesh.userData.spin = new THREE.Vector3(0, s.spinY, 0);
     debrisRoot.add(s.mesh);
     world.addMeshBounds(s.mesh, 0.4, 'station');
   }
@@ -215,6 +275,7 @@ async function buildKeepFlyingWreck(
   const d = dish.clone(true);
   d.scale.setScalar(1.4);
   d.position.set(10, 8, -4);
+  d.userData.spin = new THREE.Vector3(0, 0.4, 0);
   g.add(d);
 
   // KEEP FLYING sign

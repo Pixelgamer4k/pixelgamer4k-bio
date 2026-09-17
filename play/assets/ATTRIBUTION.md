@@ -6,7 +6,9 @@ All meshes below are vendored into this repository (no CDN hotlinks).
 - Source: https://kenney.nl/assets/space-kit
 - License: Creative Commons Zero (CC0 1.0) — see `kenney-space-kit/LICENSE.txt`
 - Credit: Kenney (www.kenney.nl) — appreciated, not required
-- Used for: Pioneer hull base (`craft_miner` / `craft_racer`), asteroids/meteors, barrels, hangars, structures, rockets, satellite dishes, platforms
+- Used for: Pioneer hull (`craft_miner`), racers/speeders/cargo wrecks, asteroids/meteors/crystal rocks,
+  barrels & rail pods, hangars (incl. glass/round), structures & diagonals, rockets, satellite dishes,
+  platforms, corridors, gates, generators, monorail cargo/box containers, rover, chimneys, supports
 
 ## Runtime
 - three.js — MIT License (npm dependency)
