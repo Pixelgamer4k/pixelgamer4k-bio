@@ -469,10 +469,10 @@
     <img class="logo" src="assets/logo.jpg" alt="Pixel Gamer 4k logo" />
     <p class="tag">Make Mobile Gaming Great Again.</p>
     <div class="play-wrap">
-      <button class="play" type="button" id="playBtn" aria-label="Play games">
+      <button class="play" type="button" id="playBtn" aria-label="Play Space Junk: Salvagers">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5.14v13.72L19 12 8 5.14z"/></svg>
       </button>
-      <span class="play-label">Play</span>
+      <span class="play-label">Play Space Junk</span>
     </div>
     <nav class="socials" aria-label="Social links">
       <a class="social" href="https://github.com/Pixelgamer4k" target="_blank" rel="noopener noreferrer" aria-label="GitHub" title="GitHub">
@@ -524,22 +524,6 @@
     </aside>
   </div>
 
-  <div class="overlay" id="playOverlay" aria-hidden="true">
-    <div class="sheet" role="dialog" aria-labelledby="playTitle">
-      <h2 id="playTitle">Games</h2>
-      <p class="sub">Ten stages. Tap a title to play a round.</p>
-      <ol class="game-list" id="gameList"></ol>
-      <button class="sheet-close" type="button" id="closePlay">Close</button>
-    </div>
-  </div>
-
-  <div id="gameRoot" aria-hidden="true">
-    <canvas id="gameCanvas"></canvas>
-    <div class="hud">
-      <div class="hud-card">
-        <h3 id="hudTitle">Game</h3>
-        <p id="hudStatus"></p>
-      </div>
       <div class="hud-timer" id="hudTimer">90</div>
     </div>
     <div class="touch-ui" aria-hidden="true">
@@ -559,7 +543,6 @@
     <div class="game-loading" id="gameLoading">Loading…</div>
   </div>
 
-  <script src="assets/three.min.js"></script>
   <script>
     const cinema = document.getElementById("cinema");
     const bio = document.getElementById("bio");
@@ -665,21 +648,11 @@
     document.getElementById("supportClose").addEventListener("click", closeSupport);
     document.getElementById("supportScrim").addEventListener("click", closeSupport);
 
-    const overlay = document.getElementById("playOverlay");
-    function openPlay() {
-      rampVolume(0.1, 500);
-      overlay.classList.add("open");
-      overlay.setAttribute("aria-hidden", "false");
-    }
-    function closePlay() {
-      const inGame = document.getElementById("gameRoot")?.classList.contains("active");
-      if (!inGame) rampVolume(1, 500);
-      overlay.classList.remove("open");
-      overlay.setAttribute("aria-hidden", "true");
-    }
-    document.getElementById("playBtn").addEventListener("click", openPlay);
-    document.getElementById("closePlay").addEventListener("click", closePlay);
-    overlay.addEventListener("click", (e) => { if (e.target === overlay) closePlay(); });
+    document.getElementById("playBtn").addEventListener("click", () => {
+      rampVolume(0.05, 400);
+      // Space Junk Zone 1 — static Vite build under /play/
+      window.location.href = "play/";
+    });
 
     const muteBtn = document.getElementById("muteBtn");
     let muted = false;
@@ -690,6 +663,5 @@
       muteBtn.setAttribute("aria-pressed", muted ? "true" : "false");
     });
   </script>
-  <script type="module" src="js/index.js"></script>
 </body>
 </html>
