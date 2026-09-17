@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { DebrisField, createSalvage, type SalvagePiece } from '../entities/salvage';
 import { DroneSwarm } from '../entities/drone';
 import { JunkBehemoth } from '../entities/boss';
-import { buildZone1Environment } from './environment';
+import { buildZone1Environment, type EnvBuildResult } from './environment';
 import { randRange } from '../util/math';
+import type { CollisionWorld } from '../systems/collision';
 
 export type MissionBeat =
   | 'intro'
@@ -13,9 +14,8 @@ export type MissionBeat =
   | 'complete';
 
 /**
- * Zone 1 — Collect 3 Power Cells → extraction.
- * Optional: rare salvage + Junk Behemoth encounter.
- * Extension hook: scene.userData.nextZoneHook
+ * Zone 1 only — Collect 3 Power Cells in 3D space → drones → extract.
+ * Junk Behemoth spawns only after 3/3 cells (during extract beat).
  */
 export class Zone1 {
   debris = new DebrisField();
@@ -30,32 +30,12 @@ export class Zone1 {
   readonly raresOptional = 10;
   extracted = false;
   bossDefeated = false;
+  world!: CollisionWorld;
+  debrisRoot!: THREE.Group;
   private bossSpawned = false;
+  private env!: EnvBuildResult;
 
-  constructor(private scene: THREE.Scene) {
-    buildZone1Environment(scene);
-    this.debris.populate(70, 78);
-    scene.add(this.debris.group);
-    scene.add(this.drones.group);
-
-    for (let i = 0; i < 3; i++) {
-      const p = new THREE.Vector3(
-        randRange(-12, 12),
-        randRange(-4, 6),
-        -42 + randRange(-8, 10),
-      );
-      const cell = createSalvage(p, 'legendary');
-      const mat = cell.mesh.material as THREE.MeshStandardMaterial;
-      mat.color.setHex(0xfedd04);
-      mat.emissive.setHex(0xfedd04);
-      mat.emissiveIntensity = 0.5;
-      cell.value = 0;
-      (cell as SalvagePiece & { isPowerCell?: boolean }).isPowerCell = true;
-      this.powerCells.push(cell);
-      this.debris.pieces.push(cell);
-      this.debris.group.add(cell.mesh);
-    }
-
+  private constructor(private scene: THREE.Scene) {
     this.extractPad = new THREE.Mesh(
       new THREE.TorusGeometry(6, 0.35, 8, 32),
       new THREE.MeshStandardMaterial({
@@ -67,12 +47,47 @@ export class Zone1 {
       }),
     );
     this.extractPad.rotation.x = Math.PI / 2;
-    this.extractPad.position.set(38, 0, 38);
+    this.extractPad.position.set(38, 6, 38);
     this.extractPad.visible = false;
-    scene.add(this.extractPad);
+  }
 
+  static async create(scene: THREE.Scene): Promise<Zone1> {
+    const z = new Zone1(scene);
+    z.env = await buildZone1Environment(scene);
+    z.world = z.env.world;
+    z.debrisRoot = z.env.debrisRoot;
+
+    z.debris.populate(85, 80);
+    scene.add(z.debris.group);
+    z.debris.group.name = 'salvageRoot';
+    scene.add(z.drones.group);
+
+    // Power cells at varied altitudes — reach-and-grab in 3D
+    const cellSpots = [
+      new THREE.Vector3(-8, 8, -38),
+      new THREE.Vector3(14, -6, -48),
+      new THREE.Vector3(4, 14, -28),
+    ];
+    for (let i = 0; i < 3; i++) {
+      const p = cellSpots[i].clone().add(new THREE.Vector3(randRange(-2, 2), randRange(-1, 1), randRange(-2, 2)));
+      const cell = createSalvage(p, 'legendary');
+      const mat = cell.mesh.material as THREE.MeshStandardMaterial;
+      mat.color.setHex(0xfedd04);
+      mat.emissive.setHex(0xfedd04);
+      mat.emissiveIntensity = 0.65;
+      cell.value = 0;
+      (cell as SalvagePiece & { isPowerCell?: boolean }).isPowerCell = true;
+      cell.mesh.name = `powerCell_${i}`;
+      z.powerCells.push(cell);
+      z.debris.pieces.push(cell);
+      z.debris.group.add(cell.mesh);
+    }
+
+    scene.add(z.extractPad);
     scene.userData.zoneId = 'zone1-orbital-debris';
-    scene.userData.nextZoneHook = 'zones/zone2'; // deferred Zones 2–5
+    // Zone 2 deferred — hook only
+    scene.userData.nextZoneHook = null;
+    return z;
   }
 
   isPowerCell(p: SalvagePiece) {
@@ -84,7 +99,7 @@ export class Zone1 {
       this.cellsCollected++;
       if (this.cellsCollected >= this.cellsNeeded && this.beat === 'collect') {
         this.beat = 'drones';
-        this.drones.spawn(5, new THREE.Vector3(10, 0, -10), 26);
+        this.drones.spawn(5, new THREE.Vector3(10, 4, -10), 26);
       }
     } else if (p.rarity === 'rare' || p.rarity === 'epic' || p.rarity === 'legendary') {
       this.raresCollected++;
@@ -98,10 +113,12 @@ export class Zone1 {
     if (this.beat === 'drones' && this.drones.aliveCount() === 0) {
       this.beat = 'extract';
       this.extractPad.visible = true;
-      if (!this.bossSpawned) {
+      // Behemoth ONLY after 3/3 cells (extract beat)
+      if (!this.bossSpawned && this.cellsCollected >= this.cellsNeeded) {
         this.bossSpawned = true;
-        this.boss = new JunkBehemoth(new THREE.Vector3(20, 3, 20));
+        this.boss = new JunkBehemoth(new THREE.Vector3(22, 8, 22));
         this.scene.add(this.boss.group);
+        this.boss.group.name = 'junkBehemoth';
       }
     }
 

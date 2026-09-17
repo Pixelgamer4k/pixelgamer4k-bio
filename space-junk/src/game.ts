@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { Ship } from './entities/ship';
 import { ChaseCamera } from './systems/camera';
 import { Input } from './systems/input';
@@ -16,6 +20,7 @@ import type { SalvagePiece } from './entities/salvage';
 
 export class Game {
   private renderer: THREE.WebGLRenderer;
+  private composer: EffectComposer | null = null;
   private scene = new THREE.Scene();
   private ship = new Ship();
   private cam: ChaseCamera;
@@ -40,7 +45,7 @@ export class Game {
   private sessionGems = 0;
   private flags = { scanTip: false, magnetTip: false, combatTip: false, bossTip: false };
   private running = false;
-  private camQuat = new THREE.Quaternion();
+  private useBloom = false;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -51,7 +56,7 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.08;
     this.root.appendChild(this.renderer.domElement);
 
     this.cam = new ChaseCamera(window.innerWidth / window.innerHeight);
@@ -70,6 +75,21 @@ export class Game {
     this.missionUI.onContinue = () => {
       this.upgrades.open();
     };
+
+    // Bloom only on desktop / higher DPR — careful on mobile
+    this.useBloom = !this.input.touchMode && matchMedia('(min-width: 900px)').matches;
+    if (this.useBloom) {
+      this.composer = new EffectComposer(this.renderer);
+      this.composer.addPass(new RenderPass(this.scene, this.cam.camera));
+      const bloom = new UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        0.28,
+        0.55,
+        0.85,
+      );
+      this.composer.addPass(bloom);
+      this.composer.addPass(new OutputPass());
+    }
 
     window.addEventListener('resize', () => this.onResize());
     window.addEventListener('keydown', (e) => {
@@ -91,16 +111,18 @@ export class Game {
       this.paused = false;
     };
 
-    this.zone = new Zone1(this.scene);
+    await this.ship.loadVisual();
+    this.zone = await Zone1.create(this.scene);
     this.scene.add(this.ship.group);
-    this.ship.position.set(0, 2, 18);
+    this.ship.position.set(0, 4, 22);
+    this.ship.yaw = 0;
+    this.ship.pitch = -0.08;
 
     this.b12.enqueue('cells');
     this.running = true;
     this.clock.start();
     this.loop();
 
-    // Duck bed music if parent bio shell exposed hook
     try {
       (window as unknown as { __pg4kSetBedVolume?: (v: number, ms: number) => void }).__pg4kSetBedVolume?.(0.08, 600);
     } catch { /* standalone */ }
@@ -137,6 +159,7 @@ export class Game {
     const h = window.innerHeight;
     this.renderer.setSize(w, h);
     this.cam.resize(w, h);
+    this.composer?.setSize(w, h);
   }
 
   private collectPiece(p: SalvagePiece) {
@@ -179,13 +202,12 @@ export class Game {
       this.tick(dt);
     }
 
-    this.cam.camera.getWorldQuaternion(this.camQuat);
-    this.renderer.render(this.scene, this.cam.camera);
+    if (this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.cam.camera);
     this.paintHud();
   };
 
   private tick(dt: number) {
-    // Tutorial tips
     if (this.input.state.scan && !this.flags.scanTip) {
       this.flags.scanTip = true;
       this.b12.enqueue('scan');
@@ -198,7 +220,7 @@ export class Game {
     if (this.input.state.scan) this.scanner.trigger(this.ship);
     this.scanner.update(dt, this.ship, this.zone.debris.alive());
 
-    this.ship.update(dt, this.input.state, this.camQuat);
+    this.ship.update(dt, this.input.state, this.zone.world);
     this.cam.update(dt, this.ship);
 
     const pulled = this.magnet.update(
@@ -209,8 +231,6 @@ export class Game {
     );
     if (pulled) this.collectPiece(pulled);
 
-    // Interact near piece without magnet (LMB also fires — collect on proximity + interact unused)
-    // Fire / combat
     if (this.zone.beat === 'drones' && !this.flags.combatTip) {
       this.flags.combatTip = true;
       this.b12.enqueue('combat');
@@ -246,7 +266,6 @@ export class Game {
           this.save.gems += 4;
           this.save.bossDefeated = true;
           void writeSave(this.save);
-          // unlock extract
           this.zone.extractPad.visible = true;
         }
       },
@@ -293,8 +312,9 @@ export class Game {
     if (this.ship.hull <= 0) {
       this.ship.hull = this.ship.maxHull;
       this.ship.shield = this.ship.maxShield * 0.5;
-      this.ship.position.set(0, 2, 18);
+      this.ship.position.set(0, 4, 22);
       this.ship.velocity.set(0, 0, 0);
+      this.ship.pitch = -0.08;
       this.toast('Systems reboot — try again');
     }
 
@@ -309,7 +329,6 @@ export class Game {
     const toRadar = (pos: THREE.Vector3, kind: typeof blips[0]['kind']) => {
       const dx = pos.x - this.ship.position.x;
       const dz = pos.z - this.ship.position.z;
-      // rotate into ship yaw frame
       const lx = dx * Math.cos(yaw) + dz * Math.sin(yaw);
       const lz = -dx * Math.sin(yaw) + dz * Math.cos(yaw);
       blips.push({
@@ -355,6 +374,8 @@ export class Game {
       bossLabel: this.zone?.boss?.phaseLabel,
       toast: this.toastT > 0 ? this.toastMsg : undefined,
       radarBlips: blips,
+      pitchDeg: this.ship.pitchDeg,
+      altitude: this.ship.position.y,
     });
   }
 }

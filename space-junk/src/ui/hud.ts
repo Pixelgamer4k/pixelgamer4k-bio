@@ -1,5 +1,4 @@
-/** Storefront HUD: logo+tagline TL · Main Objective TC · coins/gems+pause TR · radar mid-right.
- *  Labels: Hull · Shield · Cargo · Scan · Magnet (+ Objective strip). */
+/** Storefront HUD + thin pitch ladder / altitude tick near radar. */
 
 export interface HudModel {
   hull: number;
@@ -22,11 +21,16 @@ export interface HudModel {
   toast?: string;
   paused?: boolean;
   radarBlips?: { x: number; y: number; kind: 'salvage' | 'enemy' | 'objective' | 'extract' }[];
+  /** Pitch in degrees (−90..90). */
+  pitchDeg?: number;
+  /** Altitude (world Y). */
+  altitude?: number;
 }
 
 export class Hud {
   root: HTMLDivElement;
   private el: Record<string, HTMLElement> = {};
+  private pitchCv: HTMLCanvasElement | null = null;
   onPause?: () => void;
   onScan?: () => void;
 
@@ -65,10 +69,14 @@ export class Hud {
         </div>
         <div class="stat"><span class="k">Magnet</span><span class="n" id="hudMagnet">Off</span></div>
       </div>
-      <div class="radar" id="hudRadar"><canvas id="hudRadarCv" width="120" height="120"></canvas></div>
+      <div class="flight-stack">
+        <canvas id="hudPitch" class="pitch-ladder" width="56" height="120" aria-label="Pitch ladder"></canvas>
+        <div class="alt-read" id="hudAlt">ALT 0</div>
+        <div class="radar" id="hudRadar"><canvas id="hudRadarCv" width="120" height="120"></canvas></div>
+      </div>
       <div class="toast" id="hudToast" hidden></div>
       <div class="hints" id="hudHints">
-        <span>WASD Move</span><span>Mouse Aim</span><span>LMB Fire</span><span>RMB Magnet</span><span>Space Boost</span><span>Q Scan</span>
+        <span>WASD Thrust</span><span>Mouse Look</span><span>LMB Fire</span><span>RMB Magnet</span><span>Space Boost</span><span>Q Scan</span>
       </div>
     `;
     parent.appendChild(this.root);
@@ -76,10 +84,11 @@ export class Hud {
     for (const id of [
       'hudObjText', 'hudHull', 'hudShield', 'hudCargo', 'hudCoins', 'hudGems',
       'hudScan', 'hudMagnet', 'hudToast', 'hudBoss', 'hudBossLabel', 'hudBossFill',
-      'hudHints', 'hudPause', 'hudScanBtn', 'hudRadarCv',
+      'hudHints', 'hudPause', 'hudScanBtn', 'hudRadarCv', 'hudAlt', 'hudPitch',
     ]) {
       this.el[id] = this.root.querySelector('#' + id) as HTMLElement;
     }
+    this.pitchCv = this.el.hudPitch as HTMLCanvasElement;
     this.el.hudPause.addEventListener('click', () => this.onPause?.());
     this.el.hudScanBtn.addEventListener('click', () => this.onScan?.());
   }
@@ -114,7 +123,77 @@ export class Hud {
       this.el.hudToast.textContent = m.toast;
     } else this.el.hudToast.hidden = true;
 
+    const alt = m.altitude ?? 0;
+    this.el.hudAlt.textContent = `ALT ${alt >= 0 ? '+' : ''}${alt.toFixed(0)}`;
+    this.drawPitchLadder(m.pitchDeg ?? 0);
     this.drawRadar(m.radarBlips || []);
+  }
+
+  /** Thin pitch ladder — marks every 10°, horizon, current tick. */
+  private drawPitchLadder(pitchDeg: number) {
+    const cv = this.pitchCv;
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
+    const w = cv.width;
+    const h = cv.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Track
+    ctx.fillStyle = 'rgba(10,14,26,0.55)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(254,221,4,0.35)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+
+    const mid = h / 2;
+    const pxPerDeg = 1.6;
+    const clampPitch = Math.max(-60, Math.min(60, pitchDeg));
+
+    ctx.strokeStyle = 'rgba(242,244,248,0.35)';
+    ctx.fillStyle = 'rgba(242,244,248,0.55)';
+    ctx.font = '9px system-ui,sans-serif';
+    ctx.textAlign = 'left';
+
+    for (let deg = -60; deg <= 60; deg += 10) {
+      const y = mid - (deg - clampPitch) * pxPerDeg;
+      if (y < 4 || y > h - 4) continue;
+      const major = deg % 20 === 0;
+      const len = major ? 18 : 10;
+      ctx.beginPath();
+      ctx.moveTo(w - 6 - len, y);
+      ctx.lineTo(w - 6, y);
+      ctx.stroke();
+      if (major && deg !== 0) {
+        ctx.fillText(String(deg), 4, y + 3);
+      }
+    }
+
+    // Horizon
+    const hy = mid - (0 - clampPitch) * pxPerDeg;
+    if (hy > 2 && hy < h - 2) {
+      ctx.strokeStyle = '#fedd04';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(8, hy);
+      ctx.lineTo(w - 8, hy);
+      ctx.stroke();
+    }
+
+    // Current pitch caret (right edge)
+    ctx.fillStyle = '#3ad0ff';
+    ctx.beginPath();
+    ctx.moveTo(w - 2, mid);
+    ctx.lineTo(w - 10, mid - 5);
+    ctx.lineTo(w - 10, mid + 5);
+    ctx.closePath();
+    ctx.fill();
+
+    // Numeric pitch
+    ctx.fillStyle = '#3ad0ff';
+    ctx.font = 'bold 10px system-ui,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${pitchDeg >= 0 ? '+' : ''}${pitchDeg.toFixed(0)}°`, w / 2, h - 6);
   }
 
   private drawRadar(blips: HudModel['radarBlips']) {
@@ -135,7 +214,6 @@ export class Hud {
     ctx.beginPath();
     ctx.arc(w / 2, h / 2, w / 4, 0, Math.PI * 2);
     ctx.stroke();
-    // player
     ctx.fillStyle = '#3ad0ff';
     ctx.beginPath();
     ctx.arc(w / 2, h / 2, 3, 0, Math.PI * 2);
@@ -240,9 +318,24 @@ export class Hud {
         padding: 3px 8px; cursor: pointer;
       }
       #sj-hud .scan-btn:disabled { opacity: 0.4; cursor: default; }
+      #sj-hud .flight-stack {
+        position: absolute; top: 38%; right: max(10px, env(safe-area-inset-right));
+        transform: translateY(-50%);
+        display: flex; align-items: center; gap: 8px;
+      }
+      #sj-hud .pitch-ladder {
+        width: 56px; height: 120px; border-radius: 8px;
+        border: 1px solid rgba(254,221,4,0.3);
+        background: rgba(10,14,26,0.45);
+      }
+      #sj-hud .alt-read {
+        position: absolute; bottom: -22px; right: 0; left: 64px;
+        text-align: center; font-size: 0.62rem; font-weight: 750;
+        letter-spacing: 0.08em; color: #3ad0ff;
+        text-shadow: 0 1px 2px #000;
+      }
       #sj-hud .radar {
-        position: absolute; top: 40%; right: max(12px, env(safe-area-inset-right));
-        transform: translateY(-50%); width: 120px; height: 120px;
+        width: 120px; height: 120px;
         border-radius: 50%; overflow: hidden; border: 2px solid rgba(254,221,4,0.35);
         background: rgba(10,14,26,0.4);
       }
@@ -263,9 +356,11 @@ export class Hud {
         border-radius: 999px; padding: 4px 8px;
       }
       @media (max-width: 700px) {
-        #sj-hud .radar { width: 88px; height: 88px; top: 36%; }
+        #sj-hud .radar { width: 88px; height: 88px; }
         #sj-hud .radar canvas { width: 88px; height: 88px; }
+        #sj-hud .pitch-ladder { width: 44px; height: 96px; }
         #sj-hud .brand-text span { display: none; }
+        #sj-hud .flight-stack { top: 34%; }
       }
     `;
     document.head.appendChild(s);

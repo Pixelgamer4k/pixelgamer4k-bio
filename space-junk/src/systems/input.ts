@@ -1,11 +1,12 @@
 /**
- * Controls — NOT inverted.
- * Desktop: WASD move, mouse aim, LMB Fire, RMB Magnet, Space Boost, Q Scan
- * Mobile: stick LEFT (UP = camera-forward); Magnet · Boost · Fire RIGHT. Scan via HUD.
+ * Controls — true 3D flight (not flat plane).
+ *
+ * Desktop: WASD thrust/strafe along ship axes · mouse look pitch/yaw · LMB Fire · RMB/F Magnet · Space Boost · Q Scan
+ * Touch: LEFT stick move · RIGHT stick look/pitch · Magnet · Boost · Fire (right cluster) · Scan = HUD Pulse
  */
 export interface InputState {
   moveX: number;
-  moveY: number; // +forward
+  moveY: number; // +forward along ship nose
   aimX: number;
   aimY: number;
   fire: boolean;
@@ -24,6 +25,7 @@ export class Input {
   private keys = new Set<string>();
   private mouseDown = new Set<number>();
   private stick = { x: 0, y: 0, active: false };
+  private lookStick = { x: 0, y: 0, active: false };
   private mobileButtons = { boost: false, magnet: false, action: false };
   private lookAccum = { x: 0, y: 0 };
   private scanPulse = false;
@@ -38,7 +40,6 @@ export class Input {
 
   get touchMode() { return this.isTouch; }
 
-  /** HUD Scan pulse button */
   pulseScan() { this.scanPulse = true; }
 
   private bind() {
@@ -71,6 +72,10 @@ export class Input {
     this.stick = { x, y, active };
   }
 
+  setLookStick(x: number, y: number, active: boolean) {
+    this.lookStick = { x, y, active };
+  }
+
   setMobileButton(name: keyof typeof this.mobileButtons, down: boolean) {
     this.mobileButtons[name] = down;
   }
@@ -88,10 +93,18 @@ export class Input {
 
     this.state.moveX = mx;
     this.state.moveY = my;
-    this.state.aimX = this.lookAccum.x;
-    this.state.aimY = this.lookAccum.y;
+
+    // Mouse look + right stick look (stick is continuous aim rate)
+    let ax = this.lookAccum.x;
+    let ay = this.lookAccum.y;
     this.lookAccum.x = 0;
     this.lookAccum.y = 0;
+    if (this.lookStick.active) {
+      ax += this.lookStick.x * 22;
+      ay += this.lookStick.y * 22;
+    }
+    this.state.aimX = ax;
+    this.state.aimY = ay;
 
     this.state.fire = this.mouseDown.has(0) || this.mobileButtons.action;
     this.state.magnet = this.mouseDown.has(2) || k.has('KeyF') || this.mobileButtons.magnet;

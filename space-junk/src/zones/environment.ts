@@ -1,146 +1,247 @@
 import * as THREE from 'three';
 import { randRange } from '../util/math';
+import { CollisionWorld } from '../systems/collision';
+import { loadGlb, ASSET } from '../assets/loader';
 
-/** Zone 1 Orbital Debris backdrop + KEEP FLYING wreck landmark. */
-export function buildZone1Environment(scene: THREE.Scene) {
-  scene.background = new THREE.Color(0x0a0e1a);
-  scene.fog = new THREE.FogExp2(0x0b1224, 0.011);
+export interface EnvBuildResult {
+  wreck: THREE.Group;
+  world: CollisionWorld;
+  debrisRoot: THREE.Group;
+}
 
-  // Soft ambient + key
-  scene.add(new THREE.AmbientLight(0x6a7aaa, 0.55));
-  const key = new THREE.DirectionalLight(0xffe6c8, 1.15);
-  key.position.set(40, 60, 20);
-  key.castShadow = true;
+/** Zone 1 Orbital Debris — Kenney CC0 meshes + KEEP FLYING landmark + collision. */
+export async function buildZone1Environment(scene: THREE.Scene): Promise<EnvBuildResult> {
+  const world = new CollisionWorld();
+  const debrisRoot = new THREE.Group();
+  debrisRoot.name = 'debrisRoot';
+  scene.add(debrisRoot);
+
+  scene.background = new THREE.Color(0x070b16);
+  scene.fog = new THREE.FogExp2(0x0b1224, 0.0095);
+
+  scene.add(new THREE.AmbientLight(0x6a7aaa, 0.5));
+  const key = new THREE.DirectionalLight(0xffe6c8, 1.25);
+  key.position.set(40, 70, 25);
   scene.add(key);
-  const fill = new THREE.DirectionalLight(0x6688ff, 0.45);
-  fill.position.set(-30, 10, -40);
+  const fill = new THREE.DirectionalLight(0x6688ff, 0.5);
+  fill.position.set(-35, 15, -45);
   scene.add(fill);
-  const rim = new THREE.PointLight(0xfedd04, 0.8, 120);
-  rim.position.set(0, 20, -50);
+  const rim = new THREE.PointLight(0xfedd04, 1.1, 140);
+  rim.position.set(0, 18, -48);
   scene.add(rim);
+  const hemi = new THREE.HemisphereLight(0x9eb6ff, 0x1a1520, 0.35);
+  scene.add(hemi);
 
   // Starfield
   const starGeo = new THREE.BufferGeometry();
-  const starCount = 1200;
+  const starCount = 1600;
   const positions = new Float32Array(starCount * 3);
   for (let i = 0; i < starCount; i++) {
-    positions[i * 3] = randRange(-200, 200);
-    positions[i * 3 + 1] = randRange(-120, 120);
-    positions[i * 3 + 2] = randRange(-200, 200);
+    positions[i * 3] = randRange(-220, 220);
+    positions[i * 3 + 1] = randRange(-140, 140);
+    positions[i * 3 + 2] = randRange(-220, 220);
   }
   starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.35, sizeAttenuation: true })));
+  scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.32, sizeAttenuation: true })));
 
-  // Distant planet
   const planet = new THREE.Mesh(
-    new THREE.SphereGeometry(48, 32, 24),
-    new THREE.MeshStandardMaterial({ color: 0x3a6ea5, roughness: 0.85, metalness: 0.05, emissive: 0x102238, emissiveIntensity: 0.3 }),
+    new THREE.SphereGeometry(52, 32, 24),
+    new THREE.MeshStandardMaterial({
+      color: 0x3a6ea5, roughness: 0.85, metalness: 0.05, emissive: 0x102238, emissiveIntensity: 0.35,
+    }),
   );
-  planet.position.set(-90, -20, -160);
+  planet.position.set(-95, -25, -170);
   scene.add(planet);
   const atmos = new THREE.Mesh(
-    new THREE.SphereGeometry(51, 24, 16),
+    new THREE.SphereGeometry(55, 24, 16),
     new THREE.MeshBasicMaterial({ color: 0x7ec8ff, transparent: true, opacity: 0.12, side: THREE.BackSide }),
   );
   atmos.position.copy(planet.position);
   scene.add(atmos);
 
-  // Asteroid rocks
-  const rockMat = new THREE.MeshStandardMaterial({ color: 0x6a7078, roughness: 0.9, metalness: 0.15 });
-  for (let i = 0; i < 55; i++) {
-    const s = randRange(0.8, 4.5);
-    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), rockMat);
-    rock.position.set(randRange(-95, 95), randRange(-35, 35), randRange(-95, 95));
-    if (rock.position.length() < 18) rock.position.setLength(22);
-    rock.rotation.set(randRange(0, 6), randRange(0, 6), 0);
-    rock.castShadow = true;
-    scene.add(rock);
+  // Prefetch common meshes
+  const [
+    meteor, meteorD, rockA, rockB, rockS, barrel, hangar, structure, structureD,
+    dish, platform, cargo, speeder, rocketBase, rocketTop, rocketFins, hangarRound,
+  ] = await Promise.all([
+    loadGlb(ASSET.meteor),
+    loadGlb(ASSET.meteorDetailed),
+    loadGlb(ASSET.rockLargeA),
+    loadGlb(ASSET.rockLargeB),
+    loadGlb(ASSET.rocksSmallA),
+    loadGlb(ASSET.barrel),
+    loadGlb(ASSET.hangarLarge),
+    loadGlb(ASSET.structure),
+    loadGlb(ASSET.structureDetailed),
+    loadGlb(ASSET.dishLarge),
+    loadGlb(ASSET.platformLarge),
+    loadGlb(ASSET.cargoA),
+    loadGlb(ASSET.speederB),
+    loadGlb(ASSET.rocketBase),
+    loadGlb(ASSET.rocketTop),
+    loadGlb(ASSET.rocketFins),
+    loadGlb(ASSET.hangarRound),
+  ]);
+
+  // Asteroid field — meaningful size get colliders
+  const rockProtos = [meteor, meteorD, rockA, rockB, rockS];
+  for (let i = 0; i < 48; i++) {
+    const proto = rockProtos[i % rockProtos.length];
+    const rock = proto.clone(true);
+    const s = randRange(1.8, 6.5);
+    rock.scale.setScalar(s * 0.55);
+    rock.position.set(randRange(-90, 90), randRange(-38, 38), randRange(-90, 90));
+    if (rock.position.length() < 22) rock.position.setLength(24 + Math.random() * 10);
+    rock.rotation.set(randRange(0, 6), randRange(0, 6), randRange(0, 6));
+    rock.name = `asteroid_${i}`;
+    debrisRoot.add(rock);
+    if (s > 2.4) world.addMeshBounds(rock, 0.2, rock.name);
   }
 
-  // Colorful shipping containers
-  const colors = [0xfedd04, 0x3ad0ff, 0xe22b2b, 0x3ddc84, 0xff8a2a];
-  for (let i = 0; i < 28; i++) {
-    const c = new THREE.Mesh(
-      new THREE.BoxGeometry(randRange(1.2, 2.4), randRange(1, 1.8), randRange(2.5, 4)),
-      new THREE.MeshStandardMaterial({ color: colors[i % colors.length], roughness: 0.55, metalness: 0.3 }),
-    );
-    c.position.set(randRange(-70, 70), randRange(-25, 25), randRange(-70, 70));
-    if (c.position.length() < 20) c.position.setLength(25);
-    c.rotation.y = randRange(0, Math.PI);
-    scene.add(c);
+  // Barrels / containers floating
+  for (let i = 0; i < 22; i++) {
+    const b = barrel.clone(true);
+    b.scale.setScalar(randRange(1.2, 2.2));
+    b.position.set(randRange(-70, 70), randRange(-28, 28), randRange(-70, 70));
+    if (b.position.length() < 18) b.position.setLength(20);
+    b.rotation.y = randRange(0, Math.PI);
+    b.name = `barrel_${i}`;
+    debrisRoot.add(b);
   }
 
-  const wreck = buildKeepFlyingWreck();
+  // Derelict ships (visual wrecks)
+  for (let i = 0; i < 6; i++) {
+    const w = (i % 2 === 0 ? cargo : speeder).clone(true);
+    w.scale.setScalar(randRange(1.4, 2.4));
+    w.position.set(randRange(-65, 65), randRange(-20, 22), randRange(-65, 65));
+    if (w.position.length() < 25) w.position.setLength(28);
+    w.rotation.set(randRange(-0.4, 0.4), randRange(0, 6), randRange(-0.3, 0.3));
+    w.name = `wreckShip_${i}`;
+    debrisRoot.add(w);
+    world.addMeshBounds(w, 0.3, w.name);
+  }
+
+  // Station pieces away from spawn
+  const stations: { mesh: THREE.Group; pos: THREE.Vector3; scale: number }[] = [
+    { mesh: hangar.clone(true), pos: new THREE.Vector3(45, -2, -30), scale: 2.2 },
+    { mesh: hangarRound.clone(true), pos: new THREE.Vector3(-50, 4, 20), scale: 2.0 },
+    { mesh: structureD.clone(true), pos: new THREE.Vector3(30, 8, 40), scale: 2.5 },
+    { mesh: structure.clone(true), pos: new THREE.Vector3(-35, -6, -55), scale: 2.2 },
+    { mesh: platform.clone(true), pos: new THREE.Vector3(55, 12, 10), scale: 3.0 },
+    { mesh: dish.clone(true), pos: new THREE.Vector3(-20, 15, 50), scale: 2.0 },
+  ];
+  for (const s of stations) {
+    s.mesh.scale.setScalar(s.scale);
+    s.mesh.position.copy(s.pos);
+    s.mesh.rotation.y = randRange(0, Math.PI);
+    debrisRoot.add(s.mesh);
+    world.addMeshBounds(s.mesh, 0.4, 'station');
+  }
+
+  const wreck = await buildKeepFlyingWreck(rocketBase, rocketTop, rocketFins, structure, hangar, dish, platform);
   wreck.position.set(0, 2, -42);
+  wreck.name = 'keepFlyingWreck';
   scene.add(wreck);
+  world.addMeshBounds(wreck, 0.5, 'keepFlying');
+  // Extra AABBs for main hull volumes (more reliable than single mesh bounds)
+  world.addAABB(
+    new THREE.Vector3(-16, -4, -50),
+    new THREE.Vector3(16, 12, -34),
+    'keepFlyingHull',
+  );
+  world.addAABB(
+    new THREE.Vector3(-22, -5, -48),
+    new THREE.Vector3(22, 0, -36),
+    'keepFlyingWing',
+  );
 
-  return { wreck };
+  return { wreck, world, debrisRoot };
 }
 
-function buildKeepFlyingWreck(): THREE.Group {
+async function buildKeepFlyingWreck(
+  rocketBase: THREE.Group,
+  rocketTop: THREE.Group,
+  rocketFins: THREE.Group,
+  structure: THREE.Group,
+  hangar: THREE.Group,
+  dish: THREE.Group,
+  platform: THREE.Group,
+): Promise<THREE.Group> {
   const g = new THREE.Group();
   const metal = new THREE.MeshStandardMaterial({ color: 0x8a929c, roughness: 0.65, metalness: 0.55 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x3a4048, roughness: 0.7, metalness: 0.4 });
-  const accent = new THREE.MeshStandardMaterial({ color: 0xfedd04, emissive: 0x665500, emissiveIntensity: 0.25 });
 
-  // Modular station blocks
+  // Core hull blocks (collision-backed)
   const hull = new THREE.Mesh(new THREE.BoxGeometry(28, 10, 14), metal);
+  hull.visible = false; // visual from Kenney pieces
   g.add(hull);
-  const wing = new THREE.Mesh(new THREE.BoxGeometry(40, 2.5, 8), dark);
-  wing.position.set(0, -2, 2);
-  g.add(wing);
-  for (const x of [-16, 16]) {
-    const tower = new THREE.Mesh(new THREE.BoxGeometry(4, 16, 4), metal);
-    tower.position.set(x, 4, -2);
-    g.add(tower);
-  }
-  // Girder lattice
-  for (let i = 0; i < 8; i++) {
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 18), dark);
-    beam.position.set(-12 + i * 3.4, 6, 0);
-    beam.rotation.z = (i % 2) * 0.4;
-    g.add(beam);
-  }
 
-  // KEEP FLYING sign panel
+  const mid = structure.clone(true);
+  mid.scale.set(3.5, 2.5, 3);
+  mid.position.set(0, 0, 0);
+  g.add(mid);
+
+  const left = hangar.clone(true);
+  left.scale.setScalar(1.6);
+  left.position.set(-14, -1, 2);
+  left.rotation.y = 0.4;
+  g.add(left);
+
+  const right = hangar.clone(true);
+  right.scale.setScalar(1.6);
+  right.position.set(14, -1, 2);
+  right.rotation.y = -0.4;
+  g.add(right);
+
+  const deck = platform.clone(true);
+  deck.scale.set(4, 1, 2.5);
+  deck.position.set(0, -3, 4);
+  g.add(deck);
+
+  // Rocket stack landmark
+  const rb = rocketBase.clone(true);
+  rb.scale.setScalar(2);
+  rb.position.set(-8, 6, -2);
+  g.add(rb);
+  const rt = rocketTop.clone(true);
+  rt.scale.setScalar(2);
+  rt.position.set(-8, 12, -2);
+  g.add(rt);
+  const rf = rocketFins.clone(true);
+  rf.scale.setScalar(2);
+  rf.position.set(-8, 4, -2);
+  g.add(rf);
+
+  const d = dish.clone(true);
+  d.scale.setScalar(1.4);
+  d.position.set(10, 8, -4);
+  g.add(d);
+
+  // KEEP FLYING sign
   const panel = new THREE.Mesh(new THREE.BoxGeometry(14, 3.2, 0.4), dark);
-  panel.position.set(0, 3, 7.2);
+  panel.position.set(0, 3, 8.5);
   g.add(panel);
-
-  // Letter blocks spelling KEEP FLYING (chunky low-poly)
-  const letters = makeKeepFlyingLetters(accent);
-  letters.position.set(0, 3, 7.5);
+  const letters = makeKeepFlyingLetters();
+  letters.position.set(0, 3, 8.8);
   g.add(letters);
 
-  // Planet-ring logo
+  const accent = new THREE.MeshStandardMaterial({ color: 0xfedd04, emissive: 0x665500, emissiveIntensity: 0.35 });
   const logo = new THREE.Group();
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 8), accent);
+  logo.add(new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 8), accent));
   const ring = new THREE.Mesh(
     new THREE.TorusGeometry(0.85, 0.08, 6, 20),
     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 }),
   );
   ring.rotation.x = Math.PI / 2.6;
-  logo.add(ball, ring);
-  logo.position.set(-6.5, 3, 7.6);
+  logo.add(ring);
+  logo.position.set(-6.5, 3, 8.9);
   g.add(logo);
-
-  // Salvage arms
-  for (const side of [-1, 1]) {
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 10), metal);
-    arm.position.set(side * 10, -1, 8);
-    arm.rotation.y = side * 0.35;
-    g.add(arm);
-    const claw = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.8, 1.2), dark);
-    claw.position.set(side * 14, -1, 12);
-    g.add(claw);
-  }
 
   return g;
 }
 
-function makeKeepFlyingLetters(mat: THREE.Material): THREE.Group {
+function makeKeepFlyingLetters(): THREE.Group {
   const g = new THREE.Group();
-  // Simplified: two text-like bars + emissive plate with canvas texture
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 128;
@@ -153,10 +254,9 @@ function makeKeepFlyingLetters(mat: THREE.Material): THREE.Group {
   ctx.textBaseline = 'middle';
   ctx.fillText('KEEP FLYING', 256, 64);
   const tex = new THREE.CanvasTexture(canvas);
-  const sign = new THREE.Mesh(
+  g.add(new THREE.Mesh(
     new THREE.PlaneGeometry(12, 2.6),
     new THREE.MeshBasicMaterial({ map: tex, transparent: true }),
-  );
-  g.add(sign);
+  ));
   return g;
 }
