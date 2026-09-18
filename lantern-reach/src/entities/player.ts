@@ -12,12 +12,16 @@ export class Player {
   fuel = 1;
   private bob = 0;
   private bobPhase = 0;
+  private roll = 0;
   private velY = 0;
   private grounded = true;
   lantern: THREE.Group;
   lanternLight: THREE.PointLight;
   private lean = 0;
   private hurtCooldown = 0;
+  /** Pendulum state — lags walk for weighty chain feel */
+  private pendAng = 0;
+  private pendVel = 0;
 
   constructor() {
     this.camera = new THREE.PerspectiveCamera(68, 1, 0.05, 80);
@@ -40,7 +44,7 @@ export class Player {
     flame.name = 'flame';
     this.lantern.add(handle, cage, flame);
     this.lanternLight = new THREE.PointLight(0xff8844, 2.8, 14, 1.2);
-    this.lanternLight.castShadow = false; // avoid headless/shadow blackouts
+    this.lanternLight.castShadow = false;
     this.lantern.add(this.lanternLight);
     this.lanternLight.position.set(0, -0.32, 0);
     this.camera.add(this.lantern);
@@ -55,19 +59,24 @@ export class Player {
     this.hp = 1;
     this.stamina = 1;
     this.fuel = 1;
+    this.bob = 0;
+    this.bobPhase = 0;
+    this.roll = 0;
+    this.pendAng = 0;
+    this.pendVel = 0;
     this.syncCamera(0);
   }
 
-  syncCamera(dt: number) {
+  syncCamera(_dt: number) {
     const eye = 1.55 + this.bob;
     this.camera.position.set(this.position.x, this.position.y + eye, this.position.z);
     this.camera.rotation.order = 'YXZ';
     this.camera.rotation.y = this.yaw;
     this.camera.rotation.x = this.pitch;
+    this.camera.rotation.z = this.roll;
   }
 
   update(dt: number, input: Input, colliders: AABB[], interacting: boolean) {
-    // look
     const sens = 0.0022;
     this.yaw -= input.state.aimX * sens;
     this.pitch -= input.state.aimY * sens;
@@ -80,7 +89,6 @@ export class Player {
     if (wantSprint) this.stamina = Math.max(0, this.stamina - dt * 0.28);
     else this.stamina = Math.min(1, this.stamina + dt * 0.18);
 
-    // fuel tick — only drains while lantern lit (always on for this slice, slow)
     this.fuel = Math.max(0.08, this.fuel - dt * 0.008);
 
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
@@ -96,7 +104,6 @@ export class Player {
     this.position.x = res.x;
     this.position.z = res.z;
 
-    // gravity / step
     const targetY = res.groundedY;
     if (this.position.y > targetY + 0.02) {
       this.velY -= 18 * dt;
@@ -113,28 +120,42 @@ export class Player {
       this.grounded = true;
     }
 
-    // walk bob — weighty
+    // Walk bob — weightier vertical + soft lateral roll
     if (moving && this.grounded) {
-      const rate = wantSprint ? 11 : 7.2;
+      const rate = wantSprint ? 10.2 : 6.5;
       this.bobPhase += dt * rate;
-      const amp = wantSprint ? 0.055 : 0.038;
-      this.bob = Math.sin(this.bobPhase) * amp;
+      const amp = wantSprint ? 0.098 : 0.072;
+      // two-step: dip heavier on land half-cycle
+      const s = Math.sin(this.bobPhase);
+      const land = Math.pow(Math.max(0, -s), 1.6);
+      this.bob = s * amp - land * amp * 0.35;
+      const rollTarget = Math.sin(this.bobPhase) * (wantSprint ? 0.028 : 0.018);
+      this.roll += (rollTarget - this.roll) * Math.min(1, dt * 10);
     } else {
-      this.bob *= 1 - Math.min(1, dt * 8);
+      this.bob *= 1 - Math.min(1, dt * 7);
+      this.roll *= 1 - Math.min(1, dt * 6);
     }
 
-    // soft interact lean
     const leanTarget = interacting ? 0.08 : 0;
     this.lean += (leanTarget - this.lean) * Math.min(1, dt * 6);
 
-    // lantern sway + bob
-    const sway = Math.sin(this.bobPhase * 0.85) * (moving ? 0.04 : 0.012);
-    const swayY = Math.cos(this.bobPhase * 0.7) * (moving ? 0.025 : 0.01);
-    this.lantern.position.set(0.28 + sway, -0.22 + swayY - this.lean * 0.15, -0.45 - this.lean * 0.2);
-    this.lantern.rotation.z = sway * 1.4 + this.lean * 0.3;
-    this.lantern.rotation.x = swayY * 0.8;
+    // Lantern pendulum — spring toward walk drive, stronger arc
+    const drive = moving ? Math.sin(this.bobPhase * 0.55) * (wantSprint ? 0.55 : 0.38) : Math.sin(performance.now() * 0.0011) * 0.08;
+    const spring = 18;
+    const damp = 6.5;
+    const force = -spring * (this.pendAng - drive) - damp * this.pendVel;
+    this.pendVel += force * dt;
+    this.pendAng += this.pendVel * dt;
+    const sway = this.pendAng * 0.22;
+    const swayY = Math.cos(this.bobPhase * 0.48) * (moving ? 0.05 : 0.018) + Math.abs(this.pendAng) * 0.04;
+    this.lantern.position.set(
+      0.28 + sway,
+      -0.22 + swayY - this.lean * 0.15,
+      -0.45 - this.lean * 0.2,
+    );
+    this.lantern.rotation.z = this.pendAng * 0.85 + this.lean * 0.3;
+    this.lantern.rotation.x = swayY * 1.4 - Math.abs(this.pendAng) * 0.15;
 
-    // light intensity from fuel + flicker
     const flicker = 1 + Math.sin(performance.now() * 0.012) * 0.06 + Math.sin(performance.now() * 0.031) * 0.04;
     this.lanternLight.intensity = (1.2 + this.fuel * 2.2) * flicker;
     this.lanternLight.distance = 10 + this.fuel * 6;
@@ -149,7 +170,7 @@ export class Player {
     this.syncCamera(dt);
   }
 
-  /** Quiet fail — watchman noticed; soft HP tick, brief stun feel via fuel/stamina */
+  /** Quiet fail — watchman noticed; soft HP tick */
   spook(amount = 0.18) {
     if (this.hurtCooldown > 0) return;
     this.hp = Math.max(0, this.hp - amount);

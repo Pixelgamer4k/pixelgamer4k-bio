@@ -11,6 +11,27 @@ import { Hud } from './ui/hud';
 import { MobileControls } from './ui/mobile';
 import { Dialogue } from './ui/dialogue';
 
+const DOOR_OPEN_RAD = -1.25;
+
+function setDoorBlocker(blocker: Interactable & { kind: 'door' }, open: boolean) {
+  if (open) {
+    // Park off-world so corridor is walkable
+    blocker.blocker.minX = 90;
+    blocker.blocker.maxX = 91;
+    blocker.blocker.minZ = 90;
+    blocker.blocker.maxZ = 91;
+    blocker.blocker.minY = -10;
+    blocker.blocker.maxY = -9;
+  } else {
+    blocker.blocker.minX = -0.625;
+    blocker.blocker.maxX = 0.625;
+    blocker.blocker.minY = 0;
+    blocker.blocker.maxY = 2.15;
+    blocker.blocker.minZ = 18.82;
+    blocker.blocker.maxZ = 19.22;
+  }
+}
+
 export class Game {
   private pipe: PixelPipeline;
   private input: Input;
@@ -67,17 +88,23 @@ export class Game {
     this.player.reset(this.world.spawn);
     this.player.hp = this.save.hp;
     this.player.fuel = this.save.fuel;
-    // restore door visual if already opened this save
-    const door = this.world.interactables.find((i) => i.kind === 'door') as Extract<Interactable, { kind: 'door' }> | undefined;
+    const door = this.door();
     if (door && this.save.doorOpened) {
       door.open = true;
-      door.mesh.rotation.y = -1.2;
-      door.mesh.position.x = 0.55;
+      door.openAmount = 1;
+      door.hinge.rotation.y = DOOR_OPEN_RAD;
       door.label = 'E · Enter';
+      setDoorBlocker(door, true);
     }
     this.running = true;
     this.last = performance.now();
     requestAnimationFrame((t) => this.frame(t));
+  }
+
+  private door() {
+    return this.world.interactables.find((i) => i.kind === 'door') as
+      | Extract<Interactable, { kind: 'door' }>
+      | undefined;
   }
 
   private frame(t: number) {
@@ -88,14 +115,14 @@ export class Game {
     this.tick(dt);
     this.pipe.render(this.world.scene, this.player.camera);
     requestAnimationFrame((nt) => this.frame(nt));
-    // debug hook for QA (no UI lecture)
     (window as unknown as { __lr: Game }).__lr = this;
   }
 
   private tick(dt: number) {
     if (this.completed) return;
 
-    // dialogue absorbs interact
+    this.animateLiving(dt);
+
     if (this.dialogue.active) {
       this.player.update(dt, this.input, this.world.colliders, true);
       this.hud.setVitals(this.player.hp, this.player.stamina, this.player.fuel);
@@ -104,7 +131,6 @@ export class Game {
         this.dialogue.tryAdvance();
         this.audio.interactBlip();
       }
-      this.moonBob(dt);
       return;
     }
 
@@ -123,7 +149,6 @@ export class Game {
     if (spotted) {
       this.player.spook(0.16);
       this.hud.flashFade(280);
-      // soft reset toward street if HP gone
       if (this.player.hp <= 0) {
         this.player.hp = 1;
         this.player.position.set(0, 0, 10);
@@ -131,7 +156,6 @@ export class Game {
       }
     }
 
-    // loft success — quiet
     const p = this.player.position;
     const loft = this.world.loftZone;
     if (
@@ -143,7 +167,6 @@ export class Game {
       this.onLoft();
     }
 
-    this.moonBob(dt);
     this.saveTimer += dt;
     if (this.saveTimer > 4) {
       this.saveTimer = 0;
@@ -151,33 +174,92 @@ export class Game {
     }
   }
 
-  private moonBob(_dt: number) {
-    this.world.moon.position.y = 14 + Math.sin(performance.now() * 0.0003) * 0.15;
-    for (const lamp of this.world.lanternHooks) {
-      const mesh = lamp as THREE.Mesh;
-      const m = mesh.material as THREE.MeshStandardMaterial;
-      if (m && m.emissiveIntensity !== undefined) {
-        m.emissiveIntensity = 1.1 + Math.sin(performance.now() * 0.008 + lamp.position.z) * 0.25;
+  /** NPC breath/sway, street lantern pendulums, door swing */
+  private animateLiving(dt: number) {
+    const now = performance.now();
+    this.world.moon.position.y = 14 + Math.sin(now * 0.0003) * 0.15;
+
+    for (const it of this.world.interactables) {
+      if (it.kind !== 'npc') continue;
+      const t = now * 0.001 + it.phase;
+      const breath = Math.sin(t * 1.55) * 0.018;
+      const sway = Math.sin(t * 0.85) * 0.045;
+      const nod = Math.sin(t * 1.1) * 0.025;
+      it.mesh.rotation.z = sway;
+      const body = it.mesh.getObjectByName('body');
+      const head = it.mesh.getObjectByName('head');
+      if (body) {
+        body.scale.y = 1 + breath;
+        body.position.y = 0.95 + breath * 0.35;
       }
+      if (head) {
+        head.position.y = 1.55 + breath * 0.5;
+        head.rotation.x = nod;
+        head.rotation.y = Math.sin(t * 0.6) * 0.04;
+      }
+    }
+
+    for (let i = 0; i < this.world.lanternPivots.length; i++) {
+      const pivot = this.world.lanternPivots[i];
+      const seed = pivot.position.x * 0.7 + pivot.position.z * 0.31 + i;
+      pivot.rotation.z = Math.sin(now * 0.0018 + seed) * 0.22;
+      pivot.rotation.x = Math.cos(now * 0.0014 + seed * 1.3) * 0.1;
+      const ember = pivot.getObjectByName('ember') as THREE.Mesh | undefined;
+      if (ember) {
+        const m = ember.material as THREE.MeshStandardMaterial;
+        if (m?.emissiveIntensity !== undefined) {
+          m.emissiveIntensity = 1.1 + Math.sin(now * 0.008 + seed) * 0.28;
+        }
+      }
+    }
+
+    const door = this.door();
+    if (door) {
+      const target = door.open ? 1 : 0;
+      if (Math.abs(door.openAmount - target) > 0.001) {
+        door.openAmount += Math.sign(target - door.openAmount) * Math.min(1, dt * 2.4);
+        if (door.open && door.openAmount > 0.98) door.openAmount = 1;
+        if (!door.open && door.openAmount < 0.02) door.openAmount = 0;
+      }
+      door.hinge.rotation.y = DOOR_OPEN_RAD * door.openAmount;
     }
   }
 
   private findNearest(): Interactable | null {
     let best: Interactable | null = null;
-    let bestD = 2.8 * 2.8;
+    let bestD = Infinity;
     const px = this.player.position.x;
     const pz = this.player.position.z;
-    // facing bias — must roughly look at target
     const forward = new THREE.Vector3(-Math.sin(this.player.yaw), 0, -Math.cos(this.player.yaw));
+    const tmp = new THREE.Vector3();
+
     for (const it of this.world.interactables) {
-      const wp = new THREE.Vector3();
-      it.mesh.getWorldPosition(wp);
-      const d = dist2(px, pz, wp.x, wp.z);
-      if (d > bestD) continue;
-      const to = new THREE.Vector3(wp.x - px, 0, wp.z - pz).normalize();
-      if (forward.dot(to) < 0.05 && d > 1.4) continue;
-      bestD = d;
-      best = it;
+      let wx: number;
+      let wz: number;
+      let range = 2.8;
+      if (it.kind === 'door') {
+        wx = it.anchor.x;
+        wz = it.anchor.z;
+        range = 3.6; // soft prompt like Talk, easier at jamb
+      } else {
+        it.mesh.getWorldPosition(tmp);
+        wx = tmp.x;
+        wz = tmp.z;
+      }
+      const d = dist2(px, pz, wx, wz);
+      const maxD = range * range;
+      if (d > maxD) continue;
+      const to = new THREE.Vector3(wx - px, 0, wz - pz);
+      if (to.lengthSq() > 0.0001) to.normalize();
+      // Door: relax facing when close so E · Open always reads in range
+      const faceOk = it.kind === 'door'
+        ? (forward.dot(to) > -0.15 || d < 2.2 * 2.2)
+        : (forward.dot(to) >= 0.05 || d <= 1.4 * 1.4);
+      if (!faceOk) continue;
+      if (d < bestD) {
+        bestD = d;
+        best = it;
+      }
     }
     return best;
   }
@@ -194,12 +276,12 @@ export class Game {
     if (it.kind === 'door') {
       if (!it.open) {
         it.open = true;
-        it.mesh.rotation.y = -1.15;
-        it.mesh.position.x = 0.55;
-        it.label = '';
+        it.label = 'E · Enter';
         this.save.doorOpened = true;
+        setDoorBlocker(it, true);
         this.persist();
       }
+      // Already open — walking through is enough; keep Enter label if still near
     }
   }
 
@@ -221,14 +303,14 @@ export class Game {
     this.player.hp = 1;
     this.player.fuel = 1;
     this.save.reachedLoft = false;
-    // keep talked flags / door as atmosphere continuity optional — reset door for full loop
-    const door = this.world.interactables.find((i) => i.kind === 'door') as Extract<Interactable, { kind: 'door' }> | undefined;
+    const door = this.door();
     if (door) {
       door.open = false;
-      door.mesh.rotation.y = 0;
-      door.mesh.position.set(0.0, 1.05, 19.02);
+      door.openAmount = 0;
+      door.hinge.rotation.y = 0;
       door.label = 'E · Open';
       this.save.doorOpened = false;
+      setDoorBlocker(door, false);
     }
     this.persist();
   }
@@ -239,11 +321,19 @@ export class Game {
     this.player.syncCamera(0);
   }
 
+  /** QA helper — force nearest interact */
+  debugInteract() {
+    const it = this.findNearest();
+    if (it) this.doInteract(it);
+    return it?.id ?? null;
+  }
+
   debugState() {
     return {
       pos: this.player.position.toArray(),
       yaw: this.player.yaw,
       nearest: this.nearest?.id ?? null,
+      nearestLabel: this.nearest?.label ?? null,
       save: { ...this.save },
       completed: this.completed,
     };
