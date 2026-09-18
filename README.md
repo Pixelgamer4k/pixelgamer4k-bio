@@ -1,41 +1,27 @@
 # Pixel Gamer 4k — Bio
 
-Yellow brand bio site + **Lantern Reach** (3D-pixel dark fantasy opening slice).
+Static brand bio website for **Pixel Gamer 4k**, hosted on GitHub Pages.
 
-- Live bio: GitHub Pages from `main`
-- Play: `/play/` — Three.js + WebGL pixel RT pipeline (IndexedDB saves, no analytics/CDNs)
-- Source: `lantern-reach/` — `npm install && npm run build` outputs to `play/`
-- Archived: `archive/space-junk/`, `archive/signal-lost/` (retired from Play)
+- **Live Bio**: [pixelgamer4k.github.io/pixelgamer4k-bio](https://pixelgamer4k.github.io/pixelgamer4k-bio/)
+- **Hosting**: GitHub Pages from `main` branch (pure static)
 
-## Lantern Reach (this ship)
+## Features
 
-Opening slice — **street mood**, not a full game. Vibe reference only (Shadowglass Short); original art/audio.
+- **Brand Styling**: Bold yellow field (`#FEDD04`) with dark ink (`#202022`) and official PG 4K lockup.
+- **Cinema Opener**: Seamless opening sequence (`assets/opening.mp4` & `assets/bed.mp3`) with interactive start and skip options.
+- **Socials & Inquiries**:
+  - GitHub: [@Pixelgamer4k](https://github.com/Pixelgamer4k)
+  - X (Main): [@4k_isn](https://x.com/4k_isn)
+  - X (Alt): [@isn_8k](https://x.com/isn_8k)
+  - Business Email: [pixelgamer4kris@gmail.com](mailto:pixelgamer4kris@gmail.com)
+- **Crypto Support Drawer**: One-tap copy for receive-only wallet addresses:
+  - **Ethereum (ETH)**: `0x85aFd0461985c25f2D1B218fbA9eC64f48A5A80A`
+  - **Bitcoin (BTC)**: `bc1qk07wsu5dd3e73g633w7um39qfdmfkrjlsz279j`
+  - **Solana (SOL)**: `FuWaM9KQ8efAxwp28sZETYEy6b85b22VGzP3ptxUsMKi`
+- **Audio Controls**: Mute toggle for background brand music.
 
-- Title: night market under a red moon — *Lantern Reach*
-- First-person free look + WASD walk/sprint (true 3D look up/down)
-- Night market street · 2 talk NPCs · 1 door · loft stairs
-- Stealth beat: slip past the watchman (light + sound only — no UI lecture)
-- Player lantern: bob/sway, fuel tick, primary light gimmick
-- Thin HP / stamina chrome · center reticle · soft `E · Talk / Open` in range
-- Desktop + mobile move-stick + look-stick
-- Ambient Web Audio · IndexedDB save
+## Privacy & Performance
 
-Honest scope: a walkable pixel-painted street you can finish quietly. More districts later.
+- Self-contained static site with zero third-party CDNs, analytics, or trackers.
+- Vendored assets in `assets/`.
 
-### Controls
-- Desktop: WASD · mouse look (click to lock) · Shift sprint · E use
-- Mobile: left stick move · right stick look · Sprint · Use
-
-## Privacy
-- Client-side Pages only · IndexedDB saves · no accounts / analytics / CDNs
-- Art & audio: original procedural (see `lantern-reach/public/assets/ATTRIBUTION.md`)
-- Yellow/black brand chrome stays on the bio shell — never inside Play
-- Future packs: CC0 / CC-BY only, vendored in-repo with LICENSE
-
-## Dev
-```bash
-cd lantern-reach
-npm install
-npm run dev      # local
-npm run build    # writes ../play for Pages
-```
