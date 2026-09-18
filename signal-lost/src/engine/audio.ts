@@ -43,10 +43,12 @@ export class AudioBus {
     osc.stop(t0 + dur + 0.02);
   }
 
-  sfx(kind: 'step' | 'talk' | 'confirm' | 'hurt' | 'heal' | 'hit' | 'win' | 'menu' | 'pickup' | 'deny') {
+  sfx(kind: 'step' | 'talk' | 'confirm' | 'hurt' | 'heal' | 'hit' | 'win' | 'menu' | 'pickup' | 'deny' | 'quest' | 'wipe') {
     switch (kind) {
       case 'step':
-        this.tone(90 + Math.random() * 30, 0.04, 'triangle', 0.08);
+        // sharper footstep snap
+        this.tone(70 + Math.random() * 20, 0.035, 'triangle', 0.14);
+        this.tone(140 + Math.random() * 40, 0.025, 'square', 0.07, 0.01);
         break;
       case 'talk':
         this.tone(420 + Math.random() * 80, 0.05, 'square', 0.12);
@@ -80,6 +82,14 @@ export class AudioBus {
         break;
       case 'deny':
         this.tone(140, 0.12, 'sawtooth', 0.15);
+        break;
+      case 'quest':
+        [523, 659, 784].forEach((f, i) => this.tone(f, 0.1, 'square', 0.18, i * 0.07));
+        this.tone(1046, 0.18, 'sine', 0.12, 0.22);
+        break;
+      case 'wipe':
+        this.tone(200, 0.08, 'triangle', 0.1);
+        this.tone(90, 0.12, 'sine', 0.08, 0.05);
         break;
     }
   }

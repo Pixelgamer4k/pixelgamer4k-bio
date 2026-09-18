@@ -1,7 +1,8 @@
 /**
  * Turn-ish punch combat — Glitch Warden with REAL phase change at 50% HP.
+ * Phase 2 is spicier but beatable once with soda + telegraphs (no cheese required).
  */
-export type BattlePhase = 'intro' | 'player' | 'enemy' | 'phase_flash' | 'win' | 'lose';
+export type BattlePhase = 'intro' | 'player' | 'enemy' | 'enemy_telegraph' | 'phase_flash' | 'win' | 'lose';
 
 export interface BattleState {
   active: boolean;
@@ -16,14 +17,16 @@ export interface BattleState {
   playerHurt: boolean;
   playerAttack: boolean;
   enemyFrame: number;
+  /** Upcoming enemy hit shown during telegraph. */
+  pendingDmg: number;
 }
 
 export function startBossBattle(): BattleState {
   return {
     active: true,
     enemyName: 'Glitch Warden',
-    enemyHp: 40,
-    enemyMaxHp: 40,
+    enemyHp: 36,
+    enemyMaxHp: 36,
     phase: 1,
     mode: 'intro',
     timer: 1.2,
@@ -32,7 +35,19 @@ export function startBossBattle(): BattleState {
     playerHurt: false,
     playerAttack: false,
     enemyFrame: 0,
+    pendingDmg: 0,
   };
+}
+
+function rollEnemyDmg(phase: 1 | 2): number {
+  // P1: 2–4 · P2: 3–5 (was 5–7 — lethal). Competent player with 1 soda clears once.
+  if (phase === 2) return 3 + Math.floor(Math.random() * 3);
+  return 2 + Math.floor(Math.random() * 3);
+}
+
+function rollPlayerDmg(phase: 1 | 2): number {
+  if (phase === 2) return 6 + Math.floor(Math.random() * 3); // 6–8
+  return 6 + Math.floor(Math.random() * 4); // 6–9
 }
 
 export function battleUpdate(
@@ -64,7 +79,7 @@ export function battleUpdate(
     if (b.timer <= 0) {
       b.phase = 2;
       b.mode = 'player';
-      b.log = 'PHASE 2 — yellow rage!';
+      b.log = 'PHASE 2 — yellow rage! Watch telegraphs.';
     }
     return;
   }
@@ -74,18 +89,19 @@ export function battleUpdate(
     if (opts.wantItem) {
       if (opts.onUseItem()) {
         b.log = 'Pixel Soda! HP up.';
-        b.mode = 'enemy';
-        b.timer = 0.7;
+        b.mode = 'enemy_telegraph';
+        b.pendingDmg = rollEnemyDmg(b.phase);
+        b.timer = 0.55;
+        b.log += ` Warden winds up (${b.pendingDmg})…`;
       }
       return;
     }
     if (opts.wantAttack) {
       b.playerAttack = true;
-      const dmg = b.phase === 2 ? 5 + Math.floor(Math.random() * 3) : 6 + Math.floor(Math.random() * 4);
+      const dmg = rollPlayerDmg(b.phase);
       b.enemyHp = Math.max(0, b.enemyHp - dmg);
       b.log = `Nova punches for ${dmg}!`;
-      b.timer = 0.45;
-      b.mode = 'enemy';
+      b.timer = 0.4;
       // phase change at half
       if (b.phase === 1 && b.enemyHp <= b.enemyMaxHp * 0.5 && b.enemyHp > 0) {
         b.mode = 'phase_flash';
@@ -99,24 +115,34 @@ export function battleUpdate(
         b.mode = 'win';
         b.timer = 1.5;
         b.log = 'Glitch Warden crashed!';
+        return;
       }
+      b.mode = 'enemy_telegraph';
+      b.pendingDmg = rollEnemyDmg(b.phase);
+      b.log += ` Warden winds up (${b.pendingDmg})…`;
+      b.timer = b.phase === 2 ? 0.7 : 0.55;
+    }
+    return;
+  }
+
+  if (b.mode === 'enemy_telegraph') {
+    if (b.timer > 0.15) b.playerAttack = false;
+    if (b.timer <= 0) {
+      b.mode = 'enemy';
+      b.timer = 0.05;
     }
     return;
   }
 
   if (b.mode === 'enemy') {
-    if (b.timer > 0.2) b.playerAttack = false;
     if (b.timer <= 0) {
-      const dmg = b.phase === 2 ? 5 + Math.floor(Math.random() * 3) : 3 + Math.floor(Math.random() * 3);
+      const dmg = b.pendingDmg || rollEnemyDmg(b.phase);
       opts.onPlayerHit(dmg);
       b.playerHurt = true;
-      b.log = `${b.enemyName} hits for ${dmg}!`;
-      if (opts.playerHp - dmg <= 0) {
-        // caller applies damage; check after
-      }
+      b.log = `${b.enemyName} hits for ${dmg}! Your turn.`;
+      b.pendingDmg = 0;
       b.mode = 'player';
-      b.timer = 0.3;
-      b.log += ' Your turn.';
+      b.timer = 0.25;
     }
   }
 

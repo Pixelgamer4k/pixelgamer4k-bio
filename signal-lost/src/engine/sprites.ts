@@ -233,11 +233,20 @@ function buildTiles(): FrameGrid {
     {
       i: 8,
       draw: () => {
-        // gate g
+        // gate g — chunky arcade cabinet door
         px(ctx, 256, 0, 32, 32, P.road);
-        px(ctx, 260, 4, 24, 24, P.ink);
-        px(ctx, 264, 8, 16, 16, P.yellow);
-        px(ctx, 268, 12, 8, 8, P.cyan);
+        // frame
+        px(ctx, 258, 2, 28, 28, P.ink);
+        px(ctx, 260, 4, 24, 24, P.yellow);
+        px(ctx, 262, 6, 20, 20, P.ink);
+        // screen glow
+        px(ctx, 266, 10, 12, 10, P.cyan);
+        px(ctx, 268, 12, 8, 6, P.yellow);
+        // door handles / bolts
+        px(ctx, 264, 22, 4, 4, P.yellowDim);
+        px(ctx, 276, 22, 4, 4, P.yellowDim);
+        // chevron "enter"
+        px(ctx, 270, 24, 4, 2, P.cream);
       },
     },
     {
@@ -311,11 +320,14 @@ export class SpriteKit {
       npc_pip: { body: P.pink, accent: P.yellow, hair: '#804020' },
     };
     for (const [id, pal] of Object.entries(npcPalettes)) {
-      const sheet = canvas(TILE * 2, TILE * 4);
+      // cols: idle0, breath1, breath2, talk
+      const sheet = canvas(TILE * 4, TILE * 4);
       const ctx = sheet.getContext('2d')!;
       DIR_ORDER.forEach((dir, row) => {
         drawChar(ctx, 0, row * TILE, { ...pal, dir, frame: 0 });
-        drawChar(ctx, TILE, row * TILE, { ...pal, dir, frame: 3 }); // talk pose
+        drawChar(ctx, TILE, row * TILE, { ...pal, dir, frame: 1 }); // breath up
+        drawChar(ctx, TILE * 2, row * TILE, { ...pal, dir, frame: 2 }); // breath down
+        drawChar(ctx, TILE * 3, row * TILE, { ...pal, dir, frame: 3 }); // talk
       });
       this.sheets[id] = sheet;
     }
@@ -370,17 +382,23 @@ export class SpriteKit {
     dx: number,
     dy: number,
     scale: number,
-    pose: 'walk' | 'talk' | 'hurt' | 'attack' = 'walk',
+    pose: 'walk' | 'talk' | 'hurt' | 'attack' | 'idle' = 'walk',
   ) {
     const img = this.sheets[sheet];
     if (!img) return;
     const row = DIR_ORDER.indexOf(dir);
     let col = frame % 3;
-    if (pose === 'talk') col = sheet.startsWith('npc') ? 1 : 3;
-    if (pose === 'hurt') col = 4;
-    if (pose === 'attack') col = 5;
-    if (sheet === 'companion') {
+    if (sheet.startsWith('npc')) {
+      if (pose === 'talk') col = 3;
+      else col = Math.abs(frame) % 3; // breath idle cycle
+    } else if (sheet === 'companion') {
       col = pose === 'talk' ? 3 : frame % 3;
+    } else {
+      // hero
+      if (pose === 'talk') col = 3;
+      if (pose === 'hurt') col = 4;
+      if (pose === 'attack') col = 5;
+      if (pose === 'idle') col = frame % 2 === 0 ? 0 : 1; // soft breath
     }
     ctx.drawImage(img, col * TILE, row * TILE, TILE, TILE, dx, dy, TILE * scale, TILE * scale);
   }

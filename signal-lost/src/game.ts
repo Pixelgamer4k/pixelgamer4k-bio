@@ -9,7 +9,7 @@ import { SpriteKit } from './engine/sprites';
 import { saveGame, loadGame, hasSave, type SaveBlob } from './engine/save';
 import { getMap, buildCollision, MAPS, type MapDef } from './data/maps';
 import { NPCS } from './data/npcs';
-import { QUESTS, questMarker } from './data/quests';
+import { QUESTS, questMarker, questWaypoint } from './data/quests';
 import { ITEMS } from './data/items';
 import { createCompanion, companionFollow, TUTORIAL_LINES, type CompanionBrain } from './entities/companion';
 import {
@@ -21,13 +21,20 @@ import {
 import {
   drawTitleCard,
   drawNameplate,
+  drawNpcNameplate,
   drawQuestMarker,
+  drawWaypointPing,
+  drawQuestCompass,
   drawDialogue,
+  dialogueTop,
   drawPartyHp,
   drawPause,
   drawBossHud,
   drawBattleScene,
   drawToast,
+  drawQuestCompleteJuice,
+  drawMapTransition,
+  drawStepDust,
 } from './ui/hud';
 
 type Mode = 'title' | 'play' | 'dialogue' | 'pause' | 'battle' | 'toast';
@@ -66,12 +73,15 @@ export class Game {
   private companion!: CompanionBrain;
   private hp = 24;
   private maxHp = 24;
+  private beepHp = 20;
+  private beepMax = 20;
   private inv: Record<string, number> = { soda: 1 };
   private flags: Record<string, string | boolean | number> = {};
   private gold = 0;
   private dialogue: { name: string; portrait: string; lines: string[]; i: number } | null = null;
   private pauseTab: 'items' | 'quest' | 'party' = 'items';
   private pauseCursor = 0;
+  private pauseTabHits: { id: 'items' | 'quest' | 'party'; x: number; y: number; w: number; h: number }[] = [];
   private battle: BattleState | null = null;
   private toast = '';
   private toastT = 0;
@@ -84,6 +94,12 @@ export class Game {
   private titleChoice: 'continue' | 'new' = 'new';
   private pauseNavCool = 0;
   private hitLatch = false;
+  private questJuice = 0;
+  private transition = 0;
+  private transitionKind: 'fade' | 'wipe' = 'wipe';
+  private pendingWarp: { toMap: string; toSpawn: string } | null = null;
+  private stepDusts: { x: number; y: number; age: number }[] = [];
+  private prevFlags: Record<string, string | boolean | number> = {};
 
   constructor(private root: HTMLElement) {
     this.canvas = document.createElement('canvas');
@@ -94,6 +110,7 @@ export class Game {
     this.ctx = ctx;
     this.sprites.build();
     this.mountTouch();
+    this.mountPauseClicks();
     window.addEventListener('resize', () => this.resize());
     this.resize();
   }
@@ -117,6 +134,21 @@ export class Game {
     this.canvas.style.height = `${h}px`;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.ctx.imageSmoothingEnabled = false;
+    this.layoutTouch(h);
+  }
+
+  /** Large hold-to-walk zone; stays above dialogue hit area. */
+  private layoutTouch(h: number) {
+    if (!this.touchUi) return;
+    const dpad = this.touchUi.querySelector('#dpad') as HTMLElement | null;
+    if (!dpad) return;
+    const dialTop = dialogueTop(h);
+    // Keep entire pad above dialogue box with 12px gap
+    const padSize = 168;
+    const maxBottom = Math.max(16, h - dialTop + 12);
+    dpad.style.width = `${padSize}px`;
+    dpad.style.height = `${padSize}px`;
+    dpad.style.bottom = `${Math.max(maxBottom, 16)}px`;
   }
 
   private mountTouch() {
@@ -127,18 +159,27 @@ export class Game {
         #touch-ui { position:fixed; inset:0; pointer-events:none; z-index:20; }
         #dpad {
           pointer-events:auto; position:absolute;
-          left: max(12px, env(safe-area-inset-left));
-          bottom: max(16px, env(safe-area-inset-bottom));
-          width: 148px; height: 148px;
-        }
-        #dpad .cell {
-          position:absolute; width:48px; height:48px; border-radius:10px;
-          background:rgba(254,221,4,0.35); border:2px solid #121212; color:#121212;
-          font-weight:800; font-size:16px; display:grid; place-items:center;
+          left: max(8px, env(safe-area-inset-left));
+          bottom: max(120px, env(safe-area-inset-bottom));
+          width: 168px; height: 168px;
+          border-radius: 50%;
+          background: rgba(254,221,4,0.18);
+          border: 3px solid rgba(18,18,18,0.85);
+          touch-action: none;
           -webkit-user-select:none; user-select:none;
         }
-        #dpad .u { left:50px; top:0; } #dpad .d { left:50px; bottom:0; }
-        #dpad .l { left:0; top:50px; } #dpad .r { right:0; top:50px; }
+        #dpad::after {
+          content:''; position:absolute; left:50%; top:50%;
+          width:36px; height:36px; margin:-18px 0 0 -18px;
+          border-radius:50%; background:rgba(254,221,4,0.55);
+          border:2px solid #121212; pointer-events:none;
+        }
+        #dpad .knob {
+          position:absolute; left:50%; top:50%;
+          width:52px; height:52px; margin:-26px 0 0 -26px;
+          border-radius:50%; background:#FEDD04; border:2.5px solid #121212;
+          pointer-events:none; transition: none;
+        }
         #actBtn, #menuBtn {
           pointer-events:auto; position:absolute;
           right: max(16px, env(safe-area-inset-right));
@@ -146,39 +187,59 @@ export class Game {
           font-weight:800; font-size:12px; letter-spacing:0.04em;
           -webkit-user-select:none; user-select:none;
         }
-        #actBtn { bottom: max(28px, env(safe-area-inset-bottom)); width:76px; height:76px; }
-        #menuBtn { bottom: max(116px, env(safe-area-inset-bottom)); width:52px; height:52px; font-size:10px; }
+        #actBtn { bottom: max(140px, env(safe-area-inset-bottom)); width:76px; height:76px; }
+        #menuBtn { bottom: max(228px, env(safe-area-inset-bottom)); width:52px; height:52px; font-size:10px; }
+        #touch-ui.hide-pad #dpad { opacity:0; pointer-events:none; }
         @media (hover:hover) and (pointer:fine) {
           #touch-ui { opacity:0; } #touch-ui.show-force { opacity:1; }
         }
       </style>
-      <div id="dpad">
-        <div class="cell u" data-dx="0" data-dy="-1">▲</div>
-        <div class="cell d" data-dx="0" data-dy="1">▼</div>
-        <div class="cell l" data-dx="-1" data-dy="0">◀</div>
-        <div class="cell r" data-dx="1" data-dy="0">▶</div>
-      </div>
+      <div id="dpad"><div class="knob" id="dpadKnob"></div></div>
       <button type="button" id="menuBtn">MENU</button>
       <button type="button" id="actBtn">ACTION</button>
     `;
     this.root.appendChild(ui);
     this.touchUi = ui;
-    const setDir = (dx: number, dy: number) => this.input.setStick(dx, dy);
-    ui.querySelectorAll('.cell').forEach((el) => {
-      const hold = (on: boolean, node: Element) => {
-        const dx = Number((node as HTMLElement).dataset.dx);
-        const dy = Number((node as HTMLElement).dataset.dy);
-        if (on) setDir(dx, dy);
-        else this.input.setStick(0, 0);
-      };
-      el.addEventListener('pointerdown', (e) => {
-        (e as PointerEvent).preventDefault();
-        (el as HTMLElement).setPointerCapture((e as PointerEvent).pointerId);
-        hold(true, el);
-      });
-      el.addEventListener('pointerup', () => hold(false, el));
-      el.addEventListener('pointercancel', () => hold(false, el));
+    const pad = ui.querySelector('#dpad') as HTMLElement;
+    const knob = ui.querySelector('#dpadKnob') as HTMLElement;
+    let active = false;
+    const radius = 60;
+
+    const setFromEvent = (e: PointerEvent) => {
+      const rect = pad.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      let dx = e.clientX - cx;
+      let dy = e.clientY - cy;
+      const mag = Math.hypot(dx, dy) || 1;
+      const clamped = Math.min(mag, radius);
+      dx = (dx / mag) * clamped;
+      dy = (dy / mag) * clamped;
+      knob.style.transform = `translate(${dx}px,${dy}px)`;
+      const nx = dx / radius;
+      const ny = dy / radius;
+      // deadzone then full hold-to-walk
+      if (Math.hypot(nx, ny) < 0.22) this.input.setStick(0, 0);
+      else this.input.setStick(nx, ny);
+    };
+    const clear = () => {
+      active = false;
+      knob.style.transform = 'translate(0,0)';
+      this.input.setStick(0, 0);
+    };
+    pad.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      active = true;
+      pad.setPointerCapture(e.pointerId);
+      setFromEvent(e);
     });
+    pad.addEventListener('pointermove', (e) => {
+      if (!active) return;
+      e.preventDefault();
+      setFromEvent(e);
+    });
+    pad.addEventListener('pointerup', clear);
+    pad.addEventListener('pointercancel', clear);
     const act = ui.querySelector('#actBtn')!;
     act.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -189,12 +250,30 @@ export class Game {
       e.preventDefault();
       this.input.pulseMenu();
     });
-    // show touch ui on first touch
     window.addEventListener(
       'touchstart',
       () => ui.classList.add('show-force'),
       { once: true, passive: true },
     );
+  }
+
+  /** Tap pause tabs on canvas (fixes Party showing quest when tab never switches). */
+  private mountPauseClicks() {
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (this.mode !== 'pause') return;
+      const rect = this.canvas.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * window.innerWidth;
+      const y = ((e.clientY - rect.top) / rect.height) * window.innerHeight;
+      for (const t of this.pauseTabHits) {
+        if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) {
+          this.pauseTab = t.id;
+          this.pauseCursor = 0;
+          this.audio.sfx('menu');
+          e.preventDefault();
+          break;
+        }
+      }
+    });
   }
 
   private frame(now: number) {
@@ -210,9 +289,12 @@ export class Game {
 
   private async beginNew() {
     this.flags = {};
+    this.prevFlags = {};
     this.inv = { soda: 1 };
     this.hp = 24;
     this.maxHp = 24;
+    this.beepHp = 20;
+    this.beepMax = 20;
     this.gold = 0;
     this.loadMap('town', 'default');
     this.companion = createCompanion(this.player.tx, this.player.ty + 1);
@@ -234,6 +316,7 @@ export class Game {
       return;
     }
     this.flags = { ...data.questFlags };
+    this.prevFlags = { ...this.flags };
     this.inv = Object.fromEntries(data.inventory.map((i) => [i.id, i.qty]));
     this.hp = data.player.hp;
     this.maxHp = data.player.maxHp;
@@ -280,22 +363,59 @@ export class Game {
     this.warpCooldown = 0.4;
     this.nameplate = this.map.name;
     this.nameplateT = 2.2;
+    this.stepDusts = [];
   }
 
   private blocked(tx: number, ty: number): boolean {
     if (ty < 0 || tx < 0 || ty >= this.map.h || tx >= this.map.w) return true;
     if (this.collision[ty]?.[tx]) return true;
-    // NPCs solid
     for (const n of NPCS) {
       if (n.mapId === this.map.id && n.tx === tx && n.ty === ty) return true;
     }
     return false;
   }
 
+  private detectQuestComplete() {
+    for (const q of QUESTS) {
+      if (this.flags[q.doneFlag] && !this.prevFlags[q.doneFlag]) {
+        this.questJuice = 1.1;
+        this.audio.sfx('quest');
+        this.showToast(`${q.title} complete!`);
+      }
+    }
+    this.prevFlags = { ...this.flags };
+  }
+
   private update(dt: number) {
     if (this.toastT > 0) this.toastT -= dt;
     if (this.nameplateT > 0) this.nameplateT -= dt;
     if (this.warpCooldown > 0) this.warpCooldown -= dt;
+    if (this.questJuice > 0) this.questJuice -= dt;
+    for (const d of this.stepDusts) d.age += dt;
+    this.stepDusts = this.stepDusts.filter((d) => d.age < 0.28);
+
+    // Map transition mid-point swap
+    if (this.transition > 0) {
+      const prev = this.transition;
+      this.transition += dt / 0.55;
+      if (prev < 0.5 && this.transition >= 0.5 && this.pendingWarp) {
+        this.loadMap(this.pendingWarp.toMap, this.pendingWarp.toSpawn);
+        this.audio.playMusic(this.map.music);
+        this.pendingWarp = null;
+        void this.persist();
+      }
+      if (this.transition >= 1) {
+        this.transition = 0;
+      } else if (this.mode !== 'title') {
+        return; // freeze world mid-wipe
+      }
+    }
+
+    // Hide d-pad during dialogue so it never blocks talk prompts
+    if (this.touchUi) {
+      this.touchUi.classList.toggle('hide-pad', this.mode === 'dialogue' || this.mode === 'battle' || this.mode === 'pause');
+      this.layoutTouch(window.innerHeight);
+    }
 
     if (this.mode === 'title') {
       if (this.hasSave && this.input.moveDir()) {
@@ -317,13 +437,13 @@ export class Game {
         this.audio.sfx('talk');
         this.dialogue.i++;
         if (this.dialogue.i >= this.dialogue.lines.length) {
-          // finish tutorial flag when Beep lines done
           if (this.dialogue.name === 'Beep' && !this.flags.tutorial_done) {
             this.flags.tutorial_done = true;
             this.companion.tutorialIndex = TUTORIAL_LINES.length;
           }
           this.dialogue = null;
           this.mode = 'play';
+          this.detectQuestComplete();
           void this.persist();
         }
       }
@@ -414,6 +534,8 @@ export class Game {
     if (this.input.consumeMenu()) {
       this.mode = 'pause';
       this.pauseCursor = 0;
+      this.pauseTab = 'items';
+      this.input.setStick(0, 0); // stop accidental tab cycling from held d-pad
       this.audio.sfx('menu');
       return;
     }
@@ -425,7 +547,6 @@ export class Game {
       this.tryInteract();
     }
 
-    // boss trigger
     if (
       this.map.bossTrigger &&
       !this.flags.boss_dead &&
@@ -444,7 +565,6 @@ export class Game {
     if (this.player.moving) {
       this.player.t += dt / MOVE_DUR;
       const u = Math.min(1, this.player.t);
-      // ease
       const e = u * u * (3 - 2 * u);
       this.player.x = this.player.fromX + (this.player.toX - this.player.fromX) * e;
       this.player.y = this.player.fromY + (this.player.toY - this.player.fromY) * e;
@@ -457,10 +577,13 @@ export class Game {
         this.player.y = this.player.ty * TILE;
         this.player.frame = 0;
         this.audio.sfx('step');
+        this.stepDusts.push({ x: this.player.x, y: this.player.y, age: 0 });
         this.afterStep();
       }
       return;
     }
+    // idle breath frame
+    this.player.frame = Math.sin(this.player.anim * 3) > 0 ? 0 : 1;
     const dir = this.input.moveDir();
     if (!dir) return;
     this.player.facing = dir;
@@ -476,9 +599,15 @@ export class Game {
     this.player.toY = ny * TILE;
   }
 
+  private startWarp(toMap: string, toSpawn: string) {
+    this.pendingWarp = { toMap, toSpawn };
+    this.transition = 0.001;
+    this.transitionKind = 'wipe';
+    this.audio.sfx('wipe');
+  }
+
   private afterStep() {
     if (this.warpCooldown > 0) return;
-    // pickups
     for (const p of this.map.pickups) {
       if (p.x === this.player.tx && p.y === this.player.ty && !this.flags[p.onceFlag]) {
         this.flags[p.onceFlag] = true;
@@ -489,13 +618,11 @@ export class Game {
         void this.persist();
       }
     }
-    // warps
     for (const w of this.map.warps) {
       if (w.x !== this.player.tx || w.y !== this.player.ty) continue;
       if (w.requireItem && !(this.inv[w.requireItem] > 0)) {
         this.showToast(w.denyText ?? 'Locked');
         this.audio.sfx('deny');
-        // step back
         const back = DIRS[this.player.facing];
         this.player.tx -= back.x;
         this.player.ty -= back.y;
@@ -507,10 +634,7 @@ export class Game {
         this.showToast(w.denyText ?? 'Not yet');
         return;
       }
-      this.loadMap(w.toMap, w.toSpawn);
-      this.audio.playMusic(this.map.music);
-      this.audio.sfx('confirm');
-      void this.persist();
+      this.startWarp(w.toMap, w.toSpawn);
       return;
     }
   }
@@ -519,7 +643,6 @@ export class Game {
     const n = DIRS[this.player.facing];
     const tx = this.player.tx + n.x;
     const ty = this.player.ty + n.y;
-    // talk to companion if facing them
     if (this.companion && this.companion.tx === tx && this.companion.ty === ty) {
       this.dialogue = {
         name: 'Beep',
@@ -533,10 +656,7 @@ export class Game {
       return;
     }
     const npc = NPCS.find((x) => x.mapId === this.map.id && x.tx === tx && x.ty === ty);
-    if (!npc) {
-      // interact pickup adjacent crates already handled on-step
-      return;
-    }
+    if (!npc) return;
     const mut = npc.onTalk?.(this.flags, this.inv);
     if (mut?.flags) this.flags = mut.flags;
     if (mut?.inv) this.inv = mut.inv;
@@ -546,6 +666,7 @@ export class Game {
     this.dialogue = { name: npc.name, portrait: npc.portrait, lines, i: 0 };
     this.mode = 'dialogue';
     this.audio.sfx('talk');
+    this.detectQuestComplete();
     void this.persist();
   }
 
@@ -603,11 +724,10 @@ export class Game {
     if (this.mode === 'battle' && this.battle) {
       drawBattleScene(ctx, w, h, this.battle, this.sprites, this.battle.playerHurt, this.battle.playerAttack);
       drawBossHud(ctx, w, this.battle);
-      drawPartyHp(ctx, this.hp, this.maxHp, true);
+      drawPartyHp(ctx, this.hp, this.maxHp, this.beepHp, this.beepMax, true);
       return;
     }
 
-    // world camera
     const scale = this.fitScale(w, h);
     const viewW = w / scale;
     const viewH = h / scale;
@@ -617,17 +737,21 @@ export class Game {
     ctx.scale(scale, scale);
     ctx.translate(-Math.floor(camX), -Math.floor(camY));
 
-    // ground layer
     for (let y = 0; y < this.map.h; y++) {
       for (let x = 0; x < this.map.w; x++) {
         const ch = this.map.ground[y][x];
         this.sprites.drawTile(ctx, ch === 'C' || ch === '^' || ch === 'g' ? (ch === 'g' ? 'g' : '.') : ch, x * TILE, y * TILE, 1);
         if (ch === 'C' || ch === '^') this.sprites.drawTile(ctx, ch, x * TILE, y * TILE, 1);
-        if (ch === 'g') this.sprites.drawTile(ctx, 'g', x * TILE, y * TILE, 1);
+        if (ch === 'g') {
+          this.sprites.drawTile(ctx, 'g', x * TILE, y * TILE, 1);
+          // extra gate shimmer
+          const shimmer = 0.35 + Math.sin(this.time * 5) * 0.25;
+          ctx.fillStyle = `rgba(254,221,4,${shimmer * 0.35})`;
+          ctx.fillRect(x * TILE + 6, y * TILE + 6, 20, 20);
+        }
       }
     }
 
-    // pickups glimmer
     for (const p of this.map.pickups) {
       if (this.flags[p.onceFlag]) continue;
       const bob = Math.sin(this.time * 6) * 2;
@@ -635,17 +759,23 @@ export class Game {
       ctx.fillRect(p.x * TILE + 12, p.y * TILE + 12 + bob, 8, 8);
     }
 
-    // NPCs
+    // Waypoint ping under actors
+    const wp = questWaypoint(this.flags, this.inv, this.map.id);
+    if (wp && wp.mapId === this.map.id) {
+      drawWaypointPing(ctx, wp.x, wp.y, this.time);
+    }
+
     for (const n of NPCS) {
       if (n.mapId !== this.map.id) continue;
-      this.sprites.drawActor(ctx, n.portrait, n.facing, 0, n.tx * TILE, n.ty * TILE, 1, 'walk');
+      const breath = Math.floor(this.time * 2.2 + n.tx) % 3;
+      this.sprites.drawActor(ctx, n.portrait, n.facing, breath, n.tx * TILE, n.ty * TILE, 1, 'idle');
+      drawNpcNameplate(ctx, n.name, n.tx * TILE + 16, n.ty * TILE);
       if (n.questId) {
-        const m = questMarker(this.flags, n.questId);
-        if (m) drawQuestMarker(ctx, m, n.tx * TILE + 16, n.ty * TILE - 4, this.time);
+        const m = questMarker(this.flags, n.questId, this.inv);
+        if (m) drawQuestMarker(ctx, m, n.tx * TILE + 16, n.ty * TILE - 10, this.time);
       }
     }
 
-    // companion under/near player
     if (this.companion) {
       this.sprites.drawActor(
         ctx,
@@ -658,7 +788,8 @@ export class Game {
       );
     }
 
-    // player
+    for (const d of this.stepDusts) drawStepDust(ctx, d.x, d.y, d.age);
+
     this.sprites.drawActor(
       ctx,
       'hero',
@@ -667,14 +798,22 @@ export class Game {
       this.player.x,
       this.player.y,
       1,
+      this.player.moving ? 'walk' : 'idle',
     );
 
     ctx.restore();
 
-    // HUD overlay (screen space)
-    drawPartyHp(ctx, this.hp, this.maxHp, true);
+    drawPartyHp(ctx, this.hp, this.maxHp, this.beepHp, this.beepMax, true);
     if (this.nameplateT > 0) drawNameplate(ctx, this.nameplate, w / 2, 56);
     if (this.toastT > 0) drawToast(ctx, w, this.toast);
+
+    // Compass / next-step
+    if (wp && this.mode === 'play') {
+      const onMap = wp.mapId === this.map.id;
+      const dx = onMap ? wp.x * TILE + 16 - (this.player.x + 16) : 0;
+      const dy = onMap ? wp.y * TILE + 16 - (this.player.y + 16) : -1;
+      drawQuestCompass(ctx, w, wp.label, dx, dy, onMap);
+    }
 
     if (this.mode === 'dialogue' && this.dialogue) {
       const line = this.dialogue.lines[this.dialogue.i] ?? '';
@@ -693,10 +832,25 @@ export class Game {
         else if (!q.requireFlag || this.flags[q.requireFlag]) status = 'available';
         return { title: q.title, blurb: q.blurb, status };
       });
-      drawPause(ctx, w, h, this.pauseTab, items, quests, this.hp, this.maxHp, this.pauseCursor);
+      const hit = drawPause(
+        ctx,
+        w,
+        h,
+        this.pauseTab,
+        items,
+        quests,
+        this.hp,
+        this.maxHp,
+        this.beepHp,
+        this.beepMax,
+        this.pauseCursor,
+      );
+      this.pauseTabHits = hit.tabs;
     }
 
-    // back link hint
+    if (this.questJuice > 0) drawQuestCompleteJuice(ctx, w, h, this.questJuice);
+    if (this.transition > 0) drawMapTransition(ctx, w, h, this.transition, this.transitionKind);
+
     ctx.fillStyle = 'rgba(254,221,4,0.7)';
     ctx.font = '11px monospace';
     ctx.textAlign = 'right';
@@ -704,13 +858,11 @@ export class Game {
   }
 
   private fitScale(w: number, h: number): number {
-    // aim ~10–12 tiles visible on short side
     const short = Math.min(w, h);
     const want = short / (TILE * 10);
     return Math.max(1.5, Math.min(3.5, want));
   }
 }
 
-// re-export map count for README tooling
 export const MAP_COUNT = Object.keys(MAPS).length;
 void SCALE;
