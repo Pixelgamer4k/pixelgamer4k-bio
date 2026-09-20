@@ -550,6 +550,7 @@
     await initAudioEarly();
     setStatus('Loading ' + displayName(game) + '…');
     try {
+      await waitForModule();
       const u8 = await fetchBinary(game.url || ('roms/' + game.file));
       await handleRomArrayBuffer(u8, game.file);
     } catch (e) {
@@ -609,7 +610,8 @@
   }
 
   function loadCoreScript() {
-    return new Promise((resolve, reject) => {
+    if (loadCoreScript._p) return loadCoreScript._p;
+    loadCoreScript._p = new Promise((resolve, reject) => {
       const s = document.createElement('script');
       s.src = 'core/n64wasm.js';
       s.async = true;
@@ -617,6 +619,21 @@
       s.onerror = () => reject(new Error('Failed to load core/n64wasm.js'));
       document.head.appendChild(s);
     });
+    return loadCoreScript._p;
+  }
+
+  function waitForModule() {
+    if (moduleReady) return Promise.resolve();
+    return loadCoreScript().then(() => new Promise((resolve, reject) => {
+      const t0 = Date.now();
+      const t = setInterval(() => {
+        if (moduleReady) { clearInterval(t); resolve(); }
+        else if (Date.now() - t0 > 40000) {
+          clearInterval(t);
+          reject(new Error('Emulator core timed out'));
+        }
+      }, 40);
+    }));
   }
 
   // --- UI wiring ---
@@ -681,13 +698,6 @@
     if (ui.btnExitHost) {
       ui.btnExitHost.classList.remove('hidden');
       ui.btnExitHost.addEventListener('click', exitToHost);
-    }
-
-    setStatus('Loading emulator core…');
-    try {
-      await loadCoreScript();
-    } catch (e) {
-      setStatus(e.message);
     }
   }
 
