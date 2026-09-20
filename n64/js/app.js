@@ -1,12 +1,34 @@
 /**
  * N64 Web Emulator SPA — wraps N64Wasm (ParaLLEl) core.
  * Relative paths for GitHub Pages project sites.
+ * Built-in catalog only — no user ROM loading.
  */
 (function () {
   'use strict';
 
+  function showPhoneGate() {
+    const gate = document.getElementById('phoneGate');
+    const app = document.getElementById('app');
+    if (app) app.classList.add('hidden');
+    document.querySelectorAll('.menu-sheet, .menu-backdrop').forEach((el) => {
+      el.classList.add('hidden');
+    });
+    if (gate) {
+      gate.classList.remove('hidden');
+      gate.setAttribute('aria-hidden', 'false');
+    }
+  }
+
+  if (!(window.isPhonePlayDevice && window.isPhonePlayDevice())) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', showPhoneGate);
+    } else {
+      showPhoneGate();
+    }
+    return;
+  }
+
   const AUDIOBUFFSIZE = 1024;
-  const SAMPLE_ROM = 'roms/pong-pd.z64';
 
   // Default keyboard / gamepad mappings matching N64Wasm defaults (config.txt).
   const DEFAULT_MAP = {
@@ -26,13 +48,9 @@
     status: document.getElementById('statusText'),
     menuStatus: document.getElementById('menuStatus'),
     hudBadge: document.getElementById('hudBadge'),
-    fileInput: document.getElementById('fileInput'),
-    btnPick: document.getElementById('btnPickRom'),
-    btnSample: document.getElementById('btnSample'),
-    btnMenuSample: document.getElementById('btnMenuSample'),
     romLabel: document.getElementById('romLabel'),
-    dropOverlay: document.getElementById('dropOverlay'),
     padPane: document.getElementById('padPane'),
+    gameList: document.getElementById('gameList'),
     btnMenu: document.getElementById('btnMenu'),
     btnMenuClose: document.getElementById('btnMenuClose'),
     menuSheet: document.getElementById('menuSheet'),
@@ -45,7 +63,6 @@
     btnImportSram: document.getElementById('btnImportSram'),
     importStateInput: document.getElementById('importStateInput'),
     importSramInput: document.getElementById('importSramInput'),
-    btnNewRom: document.getElementById('btnNewRom'),
     btnExitHost: document.getElementById('btnExitHost'),
   };
 
@@ -113,12 +130,15 @@
 
   function exitToHost() {
     closeMenu();
-    if (!embeddedInBio) return;
-    try {
-      window.parent.postMessage({ type: 'pg4k-n64-exit' }, window.location.origin);
-    } catch (_) {
-      try { window.parent.postMessage({ type: 'pg4k-n64-exit' }, '*'); } catch (__) {}
+    if (embeddedInBio) {
+      try {
+        window.parent.postMessage({ type: 'pg4k-n64-exit' }, window.location.origin);
+      } catch (_) {
+        try { window.parent.postMessage({ type: 'pg4k-n64-exit' }, '*'); } catch (__) {}
+      }
+      return;
     }
+    try { window.location.href = '../'; } catch (_) {}
   }
 
   // --- myApp shim required by EM_ASM mobile hook in the core ---
@@ -317,6 +337,8 @@
     emulatorStarted = true;
     window.myApp.rivetsData.beforeEmulatorStarted = false;
 
+    const appEl = document.getElementById('app');
+    if (appEl) appEl.classList.remove('selecting');
     ui.boot.classList.add('hidden');
     if (ui.romLabel) ui.romLabel.textContent = romName;
     ui.canvas.focus();
@@ -378,7 +400,7 @@
 
 
   async function exportStateFile() {
-    if (!romName) { setStatus('Load a ROM first'); return; }
+    if (!romName) { setStatus('Pick a game first'); return; }
     try {
       const n = await window.SaveStore.exportState(romName);
       setStatus('Exported save state (' + n + ' bytes)');
@@ -388,7 +410,7 @@
   }
 
   async function exportSramFile() {
-    if (!romName) { setStatus('Load a ROM first'); return; }
+    if (!romName) { setStatus('Pick a game first'); return; }
     persistSramSafe();
     try {
       // Prefer live FS cart save if present
@@ -404,7 +426,7 @@
   }
 
   async function importStateFile(file) {
-    if (!romName) { setStatus('Load a ROM first'); return; }
+    if (!romName) { setStatus('Pick a game first'); return; }
     if (!file) return;
     try {
       await window.SaveStore.importState(romName, file);
@@ -417,7 +439,7 @@
   }
 
   async function importSramFile(file) {
-    if (!romName) { setStatus('Load a ROM first'); return; }
+    if (!romName) { setStatus('Pick a game first'); return; }
     if (!file) return;
     try {
       const u8 = await window.SaveStore.readFileAsUint8(file);
@@ -435,18 +457,104 @@
     const u8 = ab instanceof Uint8Array ? ab : new Uint8Array(ab);
     if (!moduleReady) {
       loadQueued = { u8, name };
-      setStatus('Core still loading… ROM queued');
+      setStatus('Core still loading… queued');
       return;
     }
     await startWithRomBytes(u8, name);
   }
 
-  function onFile(file) {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => handleRomArrayBuffer(reader.result, file.name);
-    reader.onerror = () => setStatus('Failed to read file');
-    reader.readAsArrayBuffer(file);
+  function displayName(game) {
+    if (game && game.title) return game.title;
+    return String((game && game.file) || '')
+      .replace(/\.(z64|n64|v64)$/i, '')
+      .replace(/[-_]+/g, ' ')
+      .trim();
+  }
+
+  async function shippedFileExists(url) {
+    try {
+      const head = await fetch(url, { method: 'HEAD' });
+      if (head.ok) return true;
+    } catch (_) {}
+    try {
+      const get = await fetch(url, { headers: { Range: 'bytes=0-0' } });
+      return get.ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function loadShippedGames() {
+    let listed = [];
+    try {
+      const res = await fetch('roms/catalog.json');
+      if (res.ok) {
+        const data = await res.json();
+        listed = Array.isArray(data.games) ? data.games : (Array.isArray(data) ? data : []);
+      }
+    } catch (_) {}
+    if (!listed.length) {
+      listed = [
+        { file: 'pong-pd.z64', title: 'Pong', subtitle: 'Public-domain homebrew' },
+        { file: 'n64probe-buttons-pd.z64', title: 'N64probe', subtitle: 'Button test' }
+      ];
+    }
+    const games = [];
+    for (let i = 0; i < listed.length; i++) {
+      const g = listed[i];
+      if (!g || !g.file) continue;
+      if (/readme/i.test(g.file)) continue;
+      if (!/\.(z64|n64|v64)$/i.test(g.file)) continue;
+      const file = String(g.file).replace(/^roms\//, '');
+      const url = 'roms/' + file;
+      if (await shippedFileExists(url)) {
+        games.push({
+          file: file,
+          url: url,
+          title: g.title || '',
+          subtitle: g.subtitle || file
+        });
+      }
+    }
+    return games;
+  }
+
+  function renderGameList(games) {
+    const list = ui.gameList;
+    if (!list) return;
+    list.textContent = '';
+    if (!games.length) {
+      setStatus('No games available');
+      return;
+    }
+    games.forEach((game) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'game-card';
+      const title = document.createElement('span');
+      title.className = 'game-card-title';
+      title.textContent = displayName(game);
+      const sub = document.createElement('span');
+      sub.className = 'game-card-sub';
+      sub.textContent = game.subtitle || game.file;
+      btn.appendChild(title);
+      btn.appendChild(sub);
+      btn.addEventListener('click', () => pickGame(game));
+      list.appendChild(btn);
+    });
+    setStatus('Tap a game to play');
+  }
+
+  async function pickGame(game) {
+    if (emulatorStarted) return;
+    await initAudioEarly();
+    setStatus('Loading ' + displayName(game) + '…');
+    try {
+      const u8 = await fetchBinary(game.url || ('roms/' + game.file));
+      await handleRomArrayBuffer(u8, game.file);
+    } catch (e) {
+      setStatus('Could not load game: ' + (e && e.message));
+    }
   }
 
   // --- Module bootstrap (must set window.Module BEFORE loading n64wasm.js) ---
@@ -484,7 +592,7 @@
         setStatus('FS missing after core init');
         return;
       }
-      setStatus('Emulator core ready');
+      setStatus('Emulator core ready — tap a game');
       if (loadQueued) {
         const q = loadQueued;
         loadQueued = null;
@@ -515,38 +623,15 @@
   function preventGestures() {
     document.addEventListener('gesturestart', (e) => e.preventDefault());
     document.addEventListener('gesturechange', (e) => e.preventDefault());
-    // Prevent pull-to-refresh / scroll while playing
     document.body.addEventListener('touchmove', (e) => {
       if (emulatorStarted) e.preventDefault();
     }, { passive: false });
   }
 
-  function setupDragDrop() {
-    const zone = document.getElementById('app');
-    ['dragenter', 'dragover'].forEach((ev) => {
-      zone.addEventListener(ev, (e) => {
-        e.preventDefault();
-        ui.dropOverlay.classList.remove('hidden');
-      });
-    });
-    ['dragleave', 'drop'].forEach((ev) => {
-      zone.addEventListener(ev, (e) => {
-        e.preventDefault();
-        ui.dropOverlay.classList.add('hidden');
-      });
-    });
-    zone.addEventListener('drop', (e) => {
-      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f) onFile(f);
-    });
-  }
-
   async function init() {
     preventGestures();
-    setupDragDrop();
     if (window.VirtualPad) window.VirtualPad.bindUI(ui.padPane);
 
-    // iOS: unlock audio on ANY first gesture (not only Load buttons)
     const unlockOnce = async () => {
       await initAudioEarly();
       document.removeEventListener('touchend', unlockOnce);
@@ -555,7 +640,6 @@
     document.addEventListener('touchend', unlockOnce, { once: true, passive: true });
     document.addEventListener('click', unlockOnce, { once: true });
 
-    // IndexedDB probe (Safari private mode)
     if (window.SaveStore && SaveStore.probe) {
       SaveStore.probe().then((r) => {
         if (!r.ok) {
@@ -564,26 +648,13 @@
       });
     }
 
-    ui.btnPick.addEventListener('click', async () => {
-      await initAudioEarly();
-      // iOS: input must be triggered directly from gesture — already in click handler
-      ui.fileInput.click();
-    });
-    ui.btnSample.addEventListener('click', async () => {
-      await initAudioEarly();
-      setStatus('Fetching sample ROM…');
-      try {
-        const u8 = await fetchBinary(SAMPLE_ROM);
-        await handleRomArrayBuffer(u8, 'pong-pd.z64');
-      } catch (e) {
-        setStatus('Sample ROM missing: ' + e.message);
-      }
-    });
-    ui.fileInput.addEventListener('change', () => {
-      const f = ui.fileInput.files && ui.fileInput.files[0];
-      onFile(f);
-    });
-    // Menu sheet
+    try {
+      const games = await loadShippedGames();
+      renderGameList(games);
+    } catch (e) {
+      setStatus('Could not load game list');
+    }
+
     if (ui.btnMenu) ui.btnMenu.addEventListener('click', openMenu);
     if (ui.btnMenuClose) ui.btnMenuClose.addEventListener('click', closeMenu);
     if (ui.menuBackdrop) ui.menuBackdrop.addEventListener('click', closeMenu);
@@ -607,33 +678,12 @@
       importSramFile(f);
       ui.importSramInput.value = '';
     });
-    ui.btnNewRom.addEventListener('click', () => {
-      closeMenu();
-      ui.fileInput.click();
-    });
-    if (ui.btnMenuSample) {
-      ui.btnMenuSample.addEventListener('click', async () => {
-        closeMenu();
-        await initAudioEarly();
-        setStatus('Fetching sample ROM…');
-        try {
-          const u8 = await fetchBinary(SAMPLE_ROM);
-          await handleRomArrayBuffer(u8, 'pong-pd.z64');
-        } catch (e) {
-          setStatus('Sample ROM missing: ' + e.message);
-        }
-      });
-    }
     if (ui.btnExitHost) {
-      if (embeddedInBio) {
-        ui.btnExitHost.classList.remove('hidden');
-        ui.btnExitHost.addEventListener('click', exitToHost);
-      } else {
-        ui.btnExitHost.classList.add('hidden');
-      }
+      ui.btnExitHost.classList.remove('hidden');
+      ui.btnExitHost.addEventListener('click', exitToHost);
     }
 
-    setStatus('Loading WASM core…');
+    setStatus('Loading emulator core…');
     try {
       await loadCoreScript();
     } catch (e) {

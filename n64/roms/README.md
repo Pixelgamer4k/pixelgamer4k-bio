@@ -1,28 +1,25 @@
 # ROMs folder
 
-Place your own `.z64` (preferred), `.n64`, or `.v64` dumps here.
+Built-in titles for the Pixel Gamer 4k N64 player. The app **does not** accept user-uploaded ROMs (no file picker, no drag-and-drop).
 
-## Included samples (public domain)
+## Shipped samples (public domain only)
 
-| File | Description |
-|------|-------------|
-| `pong-pd.z64` | *Pong by Oman* — public-domain homebrew from [N64-PD-ROMS](https://github.com/DerekTurtleRoe/N64-PD-ROMS) |
-| `n64probe-buttons-pd.z64` | *N64probe (Button Test) by MooglyGuy* — PD input test ROM |
+| File | Display name | Notes |
+|------|----------------|-------|
+| `pong-pd.z64` | Pong | *Pong by Oman* — PD homebrew from [N64-PD-ROMS](https://github.com/DerekTurtleRoe/N64-PD-ROMS) |
+| `n64probe-buttons-pd.z64` | N64probe | *N64probe (Button Test) by MooglyGuy* — PD input test |
 
-These are **not** commercial games. They are redistributed as public-domain / PD-labeled scene ROMs for emulator testing.
+These are **not** commercial games.
 
-## Adding your ROMs
+## Adding more homebrew later
 
-1. Copy a legally obtained dump into this folder, e.g. `roms/mygame.z64`.
-2. Prefer **big-endian `.z64`**. The loader also accepts `.n64` / `.v64` and converts to z64 automatically.
-3. Either:
-   - Open the app and use **Load ROM** / drag-and-drop, or
-   - Add an optional preload entry in `js/romlist.js` (if present) / use the file picker.
+1. Place a redistributable `.z64` (preferred) in this folder.
+2. Add a display-name entry to `catalog.json`:
 
-## Legal
+```json
+{ "file": "my-homebrew.z64", "title": "My Homebrew", "subtitle": "Optional blurb" }
+```
 
-- Commercial N64 ROMs: only use dumps you personally own / are legally entitled to use. Do not redistribute commercial ROMs with this project.
-- Homebrew / Pyrite Engine titles: OK when the author permits redistribution or personal use.
-- Do not commit commercial dumps to a public GitHub repo.
+3. Do **not** add commercial N64 dumps (Super Mario 64, Zelda, etc.). Never commit those binaries.
 
-Typical commercial ROMs are ~8–64 MB; homebrew/Pyrite builds of 20–30 MB fit fine in a repo if license allows.
+The picker reads `catalog.json` and only shows files that are actually present (README is ignored).

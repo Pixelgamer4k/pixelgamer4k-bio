@@ -46,6 +46,45 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
+.phone-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 28px;
+  background: #FEDD04;
+  color: #202022;
+  font-family: "SF Pro Display", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.phone-gate.hidden { display: none; }
+.phone-gate img {
+  width: min(148px, 42vw);
+  height: auto;
+  margin-bottom: 18px;
+  filter: drop-shadow(0 8px 0 rgba(32, 32, 34, 0.08));
+}
+.phone-gate h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.phone-gate p {
+  margin: 10px 0 0;
+  max-width: 28ch;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: rgba(32, 32, 34, 0.58);
+}
+
+.app.hidden { display: none; }
+.app.selecting .pad-pane { display: none; }
+.app.selecting .screen-pane { flex: 1 1 100%; }
+
 .app {
   display: flex;
   flex-direction: column;
@@ -180,12 +219,15 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 10px;
-  padding: 16px;
+  padding: max(52px, calc(12px + var(--safe-t))) 16px 16px;
   text-align: center;
   background: linear-gradient(180deg, #0e0e12f2, #0e0e12fa);
   z-index: 2;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 .boot-overlay.hidden { display: none; }
 .boot-overlay h1 {
@@ -195,15 +237,43 @@ html, body {
   font-weight: 700;
 }
 .boot-overlay .sub { margin: 0; opacity: 0.65; font-size: 0.85rem; }
-.boot-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .status { font-size: 0.75rem; opacity: 0.8; max-width: 92%; word-break: break-word; }
 
-.drop-overlay {
-  position: absolute; inset: 0; z-index: 5;
-  display: flex; align-items: center; justify-content: center;
-  background: #2563eb99; font-weight: 600; pointer-events: none;
+.game-list {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 4px;
 }
-.drop-overlay.hidden { display: none; }
+.game-card {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  border: 1.5px solid #fedd04;
+  background: #2a2a32;
+  color: #f2f2f4;
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.game-card-title {
+  display: block;
+  font-weight: 700;
+  font-size: 1rem;
+}
+.game-card-sub {
+  display: block;
+  font-size: 0.75rem;
+  opacity: 0.65;
+  margin-top: 4px;
+}
+.game-card:active {
+  transform: scale(0.99);
+  background: #3a3a46;
+}
 
 .btn {
   appearance: none;

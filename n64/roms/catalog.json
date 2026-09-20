@@ -1,0 +1,14 @@
+{
+  "games": [
+    {
+      "file": "pong-pd.z64",
+      "title": "Pong",
+      "subtitle": "Public-domain homebrew"
+    },
+    {
+      "file": "n64probe-buttons-pd.z64",
+      "title": "N64probe",
+      "subtitle": "Button test"
+    }
+  ]
+}

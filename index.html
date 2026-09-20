@@ -348,6 +348,35 @@
       min-height: 36px;
     }
     .n64-exit:active { transform: scale(0.97); }
+    .n64-overlay.gated iframe { display: none; }
+    .n64-desktop-gate {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 28px;
+      background: var(--field);
+      color: var(--ink);
+    }
+    .n64-overlay.gated .n64-desktop-gate { display: flex; }
+    .n64-desktop-gate img {
+      width: min(148px, 42vw);
+      height: auto;
+      margin-bottom: 18px;
+      filter: drop-shadow(0 8px 0 rgba(32, 32, 34, 0.08));
+    }
+    .n64-desktop-gate h2 { font-size: 1.25rem; font-weight: 700; }
+    .n64-desktop-gate p {
+      margin-top: 10px;
+      max-width: 28ch;
+      font-size: 0.95rem;
+      line-height: 1.45;
+      color: var(--ink-soft);
+    }
 
   </style>
 </head>
@@ -428,9 +457,15 @@
     <div class="n64-chrome">
       <button class="n64-exit" type="button" id="n64Exit">Exit</button>
     </div>
+    <div class="n64-desktop-gate" id="n64DesktopGate">
+      <img src="assets/logo.jpg" alt="" />
+      <h2>Phones only</h2>
+      <p>Play is available on iOS and Android phones.</p>
+    </div>
     <iframe id="n64Frame" title="N64 Web Emulator" allow="autoplay; fullscreen; gamepad" allowfullscreen></iframe>
   </div>
 
+  <script src="n64/js/phone-gate.js"></script>
   <script>
     const cinema = document.getElementById("cinema");
     const bio = document.getElementById("bio");
@@ -551,6 +586,7 @@
     const n64Frame = document.getElementById("n64Frame");
     const n64Exit = document.getElementById("n64Exit");
     let n64Open = false;
+    let bedHeld = false;
     let bedSnapshot = { muted: false, volume: 1, paused: true };
 
     function snapshotBed() {
@@ -563,10 +599,13 @@
 
     function pauseBedForPlay() {
       snapshotBed();
+      bedHeld = true;
       try { bed.pause(); } catch (_) {}
     }
 
     async function restoreBedAfterPlay() {
+      if (!bedHeld) return;
+      bedHeld = false;
       bed.muted = bedSnapshot.muted;
       muteBtn.textContent = bed.muted ? "Sound off" : "Sound on";
       muteBtn.setAttribute("aria-pressed", bed.muted ? "true" : "false");
@@ -598,11 +637,20 @@
       if (n64Open) return;
       n64Open = true;
       closeSupport();
-      pauseBedForPlay();
       document.documentElement.classList.add("n64-playing");
       document.body.classList.add("n64-playing");
       n64Overlay.classList.add("open");
       n64Overlay.setAttribute("aria-hidden", "false");
+
+      const phone = window.isPhonePlayDevice && window.isPhonePlayDevice();
+      if (!phone) {
+        n64Overlay.classList.add("gated");
+        n64Frame.removeAttribute("src");
+        return;
+      }
+
+      n64Overlay.classList.remove("gated");
+      pauseBedForPlay();
       n64Frame.src = "n64/index.html";
       await requestOverlayFullscreen();
     }
@@ -611,7 +659,7 @@
       if (!n64Open) return;
       n64Open = false;
       await leaveOverlayFullscreen();
-      n64Overlay.classList.remove("open");
+      n64Overlay.classList.remove("open", "gated");
       n64Overlay.setAttribute("aria-hidden", "true");
       document.documentElement.classList.remove("n64-playing");
       document.body.classList.remove("n64-playing");
