@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#1a1a1e" />
+  <title>N64 Web Emulator</title>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div id="app" class="app">
+    <!-- Top ~50%: 4:3 letterboxed canvas -->
+    <section id="screenPane" class="screen-pane">
+      <div id="dropOverlay" class="drop-overlay hidden" aria-hidden="true">
+        <p>Drop ROM (.z64 / .n64 / .v64)</p>
+      </div>
+
+      <header class="hud" aria-label="Status bar">
+        <div class="hud-left">
+          <span id="hudBadge" class="hud-badge hidden" aria-live="polite"></span>
+          <span id="romLabel" class="rom-label"></span>
+        </div>
+        <button type="button" id="btnMenu" class="menu-fab" aria-haspopup="dialog" aria-controls="menuSheet" aria-expanded="false" title="Menu">
+          <span class="menu-fab-bars" aria-hidden="true"></span>
+          <span class="menu-fab-label">Menu</span>
+        </button>
+      </header>
+
+      <div class="canvas-wrap">
+        <canvas id="canvas" width="640" height="480" tabindex="0"></canvas>
+        <div id="bootOverlay" class="boot-overlay">
+          <h1>N64 Web</h1>
+          <p class="sub">Mobile ParaLLEl / N64Wasm core</p>
+          <div class="boot-actions">
+            <button type="button" id="btnPickRom" class="btn primary">Load ROM</button>
+            <button type="button" id="btnSample" class="btn">Play sample (Pong PD)</button>
+          </div>
+          <p id="statusText" class="status">Ready — own dumps / allowed homebrew only</p>
+          <input id="fileInput" type="file" accept=".z64,.n64,.v64,application/octet-stream,*/*" hidden />
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom ~50%: tactile virtual pad — two-thumb layout -->
+    <section id="padPane" class="pad-pane" aria-label="Virtual gamepad">
+      <!-- Shoulder / start row along top of pad -->
+      <div class="pad-row triggers" role="group" aria-label="Shoulders and start">
+        <button type="button" class="pad-btn oval" data-btn="l">L</button>
+        <button type="button" class="pad-btn oval" data-btn="z">Z</button>
+        <button type="button" class="pad-btn oval start" data-btn="start">START</button>
+        <button type="button" class="pad-btn oval" data-btn="r">R</button>
+      </div>
+
+      <div class="pad-row main">
+        <!-- Left thumb: D-pad + analog stick -->
+        <div class="left-cluster">
+          <div class="dpad" id="dpad" aria-label="D-pad">
+            <span class="dpad-empty" aria-hidden="true"></span>
+            <button type="button" class="pad-btn dpad-arm up" data-btn="up" aria-label="Up"><span></span></button>
+            <span class="dpad-empty" aria-hidden="true"></span>
+            <button type="button" class="pad-btn dpad-arm left" data-btn="left" aria-label="Left"><span></span></button>
+            <div class="dpad-hub" aria-hidden="true"></div>
+            <button type="button" class="pad-btn dpad-arm right" data-btn="right" aria-label="Right"><span></span></button>
+            <span class="dpad-empty" aria-hidden="true"></span>
+            <button type="button" class="pad-btn dpad-arm down" data-btn="down" aria-label="Down"><span></span></button>
+            <span class="dpad-empty" aria-hidden="true"></span>
+          </div>
+          <div class="stick-zone" id="stickZone">
+            <div class="stick-base" aria-label="Analog stick">
+              <div class="stick-ring" aria-hidden="true"></div>
+              <div class="stick-knob" id="stickKnob"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right thumb: C diamond + A/B -->
+        <div class="right-cluster">
+          <div class="c-cluster" aria-label="C buttons">
+            <button type="button" class="pad-btn c up" data-btn="cup" aria-label="C Up">▲</button>
+            <button type="button" class="pad-btn c left" data-btn="cleft" aria-label="C Left">◀</button>
+            <button type="button" class="pad-btn c right" data-btn="cright" aria-label="C Right">▶</button>
+            <button type="button" class="pad-btn c down" data-btn="cdown" aria-label="C Down">▼</button>
+          </div>
+          <div class="ab-cluster" aria-label="A and B">
+            <button type="button" class="pad-btn face b" data-btn="b">B</button>
+            <button type="button" class="pad-btn face a" data-btn="a">A</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Menu sheet: secondary actions (replaces cluttered toolbar) -->
+  <div id="menuBackdrop" class="menu-backdrop hidden" aria-hidden="true"></div>
+  <aside id="menuSheet" class="menu-sheet hidden" role="dialog" aria-modal="true" aria-labelledby="menuTitle" aria-hidden="true">
+    <div class="menu-handle" aria-hidden="true"></div>
+    <h2 id="menuTitle" class="menu-title">Menu</h2>
+    <p id="menuStatus" class="menu-status" aria-live="polite"></p>
+    <nav class="menu-list">
+      <button type="button" id="btnSaveState" class="menu-item">Save state</button>
+      <button type="button" id="btnLoadState" class="menu-item">Load state</button>
+      <button type="button" id="btnExportState" class="menu-item">Export state</button>
+      <button type="button" id="btnImportState" class="menu-item">Import state</button>
+      <button type="button" id="btnExportSram" class="menu-item">Export cart save</button>
+      <button type="button" id="btnImportSram" class="menu-item">Import cart save</button>
+      <button type="button" id="btnNewRom" class="menu-item">Load ROM</button>
+      <button type="button" id="btnMenuSample" class="menu-item">Play sample ROM</button>
+      <button type="button" id="btnExitHost" class="menu-item exit hidden">Exit to bio</button>
+    </nav>
+    <button type="button" id="btnMenuClose" class="menu-close">Close</button>
+    <input id="importStateInput" type="file" accept=".n64state,.gz,application/gzip,application/octet-stream" hidden />
+    <input id="importSramInput" type="file" accept=".savememory,.eep,.sra,.fla,application/octet-stream" hidden />
+  </aside>
+
+  <script src="js/rom-endian.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/gamepad.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

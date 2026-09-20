@@ -18,10 +18,11 @@ Static brand bio website for **Pixel Gamer 4k**, hosted on GitHub Pages.
   - **Ethereum (ETH)**: `0x85aFd0461985c25f2D1B218fbA9eC64f48A5A80A`
   - **Bitcoin (BTC)**: `bc1qk07wsu5dd3e73g633w7um39qfdmfkrjlsz279j`
   - **Solana (SOL)**: `FuWaM9KQ8efAxwp28sZETYEy6b85b22VGzP3ptxUsMKi`
+- **Play → N64 emulator**: After the cinema intro, tap **Play** (directly below Support) to open a fullscreen N64 web emulator (`n64/`). Uses the Fullscreen API where available, plus a full-viewport overlay so iOS Safari still fills the screen. **Exit** (overlay chrome or emulator Menu) returns to the bio and restores bed-music mute/volume. Public-domain sample ROMs only — no commercial dumps.
 - **Audio Controls**: Mute toggle for background brand music.
 
 ## Privacy & Performance
 
 - Self-contained static site with zero third-party CDNs, analytics, or trackers.
-- Vendored assets in `assets/`.
+- Vendored assets in `assets/`. Emulator core + PD samples live under `n64/` (relative paths for this GitHub Pages project site).
 

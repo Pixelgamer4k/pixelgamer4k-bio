@@ -207,7 +207,9 @@
     .social svg { width: 22px; height: 22px; fill: currentColor; }
     .social[aria-label="Email"] svg { width: 20px; height: 20px; }
     .support-wrap { margin-top: 28px; width: 100%; }
-    .support-btn {
+    .play-wrap { margin-top: 12px; width: 100%; }
+    .support-btn,
+    .play-btn {
       width: 100%;
       min-height: 54px;
       border-radius: 999px;
@@ -225,9 +227,12 @@
       gap: 10px;
       transition: background 0.18s var(--ease), transform 0.18s var(--ease);
     }
-    .support-btn:hover { background: rgba(32, 32, 34, 0.05); }
-    .support-btn:active { transform: scale(0.985); }
-    .support-btn svg { width: 18px; height: 18px; }
+    .support-btn:hover,
+    .play-btn:hover { background: rgba(32, 32, 34, 0.05); }
+    .support-btn:active,
+    .play-btn:active { transform: scale(0.985); }
+    .support-btn svg,
+    .play-btn svg { width: 18px; height: 18px; }
     .mute {
       margin-top: 20px;
       border: 0;
@@ -296,6 +301,54 @@
       font-size: 0.78rem; line-height: 1.45; word-break: break-all;
     }
 
+    html.n64-playing, body.n64-playing { overflow: hidden; height: 100%; }
+    .n64-overlay {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
+      z-index: 90;
+      background: #0e0e12;
+      display: none;
+      flex-direction: column;
+    }
+    .n64-overlay.open {
+      display: flex;
+    }
+    .n64-overlay iframe {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #000;
+    }
+    .n64-chrome {
+      position: absolute;
+      top: max(10px, env(safe-area-inset-top));
+      left: max(10px, env(safe-area-inset-left));
+      z-index: 2;
+      pointer-events: none;
+    }
+    .n64-exit {
+      pointer-events: auto;
+      appearance: none;
+      border: 1.5px solid var(--ink);
+      background: var(--field);
+      color: var(--ink);
+      font: inherit;
+      font-weight: 650;
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 8px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      min-height: 36px;
+    }
+    .n64-exit:active { transform: scale(0.97); }
+
   </style>
 </head>
 <body>
@@ -335,6 +388,12 @@
         Support
       </button>
     </div>
+    <div class="play-wrap">
+      <button class="play-btn" type="button" id="playBtn" aria-label="Play N64 emulator">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5.14v13.72L19 12 8 5.14z"/></svg>
+        Play
+      </button>
+    </div>
     <button class="mute" type="button" id="muteBtn" aria-pressed="false">Sound on</button>
   </main>
 
@@ -363,6 +422,13 @@
         <div class="wallet-addr">FuWaM9KQ8efAxwp28sZETYEy6b85b22VGzP3ptxUsMKi</div>
       </button>
     </aside>
+  </div>
+
+  <div class="n64-overlay" id="n64Overlay" aria-hidden="true">
+    <div class="n64-chrome">
+      <button class="n64-exit" type="button" id="n64Exit">Exit</button>
+    </div>
+    <iframe id="n64Frame" title="N64 Web Emulator" allow="autoplay; fullscreen; gamepad" allowfullscreen></iframe>
   </div>
 
   <script>
@@ -478,6 +544,91 @@
       bed.muted = muted;
       muteBtn.textContent = muted ? "Sound off" : "Sound on";
       muteBtn.setAttribute("aria-pressed", muted ? "true" : "false");
+    });
+
+    const playBtn = document.getElementById("playBtn");
+    const n64Overlay = document.getElementById("n64Overlay");
+    const n64Frame = document.getElementById("n64Frame");
+    const n64Exit = document.getElementById("n64Exit");
+    let n64Open = false;
+    let bedSnapshot = { muted: false, volume: 1, paused: true };
+
+    function snapshotBed() {
+      bedSnapshot = {
+        muted: !!bed.muted,
+        volume: typeof bed.volume === "number" ? bed.volume : 1,
+        paused: !!bed.paused,
+      };
+    }
+
+    function pauseBedForPlay() {
+      snapshotBed();
+      try { bed.pause(); } catch (_) {}
+    }
+
+    async function restoreBedAfterPlay() {
+      bed.muted = bedSnapshot.muted;
+      muteBtn.textContent = bed.muted ? "Sound off" : "Sound on";
+      muteBtn.setAttribute("aria-pressed", bed.muted ? "true" : "false");
+      muted = bed.muted;
+      if (typeof bedSnapshot.volume === "number") bed.volume = bedSnapshot.volume;
+      if (!bedSnapshot.paused) {
+        try { await bed.play(); } catch (_) {}
+      }
+    }
+
+    async function requestOverlayFullscreen() {
+      const el = n64Overlay;
+      try {
+        if (el.requestFullscreen) await el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      } catch (_) {
+        // iOS Safari typically has no element Fullscreen API; overlay still covers the viewport.
+      }
+    }
+
+    async function leaveOverlayFullscreen() {
+      try {
+        if (document.fullscreenElement) await document.exitFullscreen();
+        else if (document.webkitFullscreenElement) document.webkitExitFullscreen();
+      } catch (_) {}
+    }
+
+    async function openN64() {
+      if (n64Open) return;
+      n64Open = true;
+      closeSupport();
+      pauseBedForPlay();
+      document.documentElement.classList.add("n64-playing");
+      document.body.classList.add("n64-playing");
+      n64Overlay.classList.add("open");
+      n64Overlay.setAttribute("aria-hidden", "false");
+      n64Frame.src = "n64/index.html";
+      await requestOverlayFullscreen();
+    }
+
+    async function closeN64() {
+      if (!n64Open) return;
+      n64Open = false;
+      await leaveOverlayFullscreen();
+      n64Overlay.classList.remove("open");
+      n64Overlay.setAttribute("aria-hidden", "true");
+      document.documentElement.classList.remove("n64-playing");
+      document.body.classList.remove("n64-playing");
+      n64Frame.removeAttribute("src");
+      n64Frame.src = "about:blank";
+      await restoreBedAfterPlay();
+    }
+
+    playBtn.addEventListener("click", openN64);
+    n64Exit.addEventListener("click", closeN64);
+    window.addEventListener("message", (e) => {
+      if (e.origin !== window.location.origin) return;
+      const data = e.data || {};
+      if (data.type === "pg4k-n64-exit") closeN64();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && n64Open) closeN64();
     });
   </script>
 </body>
