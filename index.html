@@ -190,6 +190,35 @@
       font-size: 0.95rem;
     }
     .stage-name { font-weight: 650; }
+    .mini-fund {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .mini-track {
+      flex: 1;
+      min-width: 40px;
+      height: 8px;
+      border: 1.2px solid var(--ink);
+      border-radius: 999px;
+      background: rgba(32, 32, 34, 0.08);
+      overflow: hidden;
+    }
+    .mini-track > i {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: var(--ink);
+      border-radius: 999px;
+    }
+    .mini-text {
+      font-size: 0.72rem;
+      font-weight: 600;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
     .stage-state { font-size: 0.75rem; font-weight: 500; color: rgba(32, 32, 34, 0.7); }
     .stage-bar {
       margin-top: 8px;
@@ -279,7 +308,14 @@
           <div class="stage-desc">Guns and operators, all unlocked. Multiplayer matches with bots.</div>
         </div>
         <div class="stage todo">
-          <div class="stage-top"><span class="stage-name">v2</span><span class="stage-state">Not completed</span></div>
+          <div class="stage-top">
+            <span class="stage-name">v2</span>
+            <span class="mini-fund">
+              <span class="mini-track"><i id="miniBar"></i></span>
+              <span class="mini-text" id="miniText">$17 of $200</span>
+            </span>
+            <span class="stage-state">Not completed</span>
+          </div>
           <div class="stage-bar" role="img" aria-label="v2 not started"><i></i></div>
           <div class="stage-desc">Private matches and Battle Royale modes. Development proceeds only if funding is reached.</div>
         </div>
@@ -312,6 +348,8 @@
       document.querySelector(".fund-track").setAttribute("aria-valuenow", raised);
       document.querySelector(".fund-track").setAttribute("aria-valuemax", goal);
       document.getElementById("fundText").textContent = "$" + raised + " of $" + goal;
+      document.getElementById("miniBar").style.width = pct.toFixed(1) + "%";
+      document.getElementById("miniText").textContent = "$" + raised + " of $" + goal;
 
       var gate = document.getElementById("gate");
       var trigger = document.getElementById("downloadTrigger");
