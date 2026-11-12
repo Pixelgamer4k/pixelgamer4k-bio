@@ -174,40 +174,35 @@
       line-height: 1.55;
       color: rgba(32, 32, 34, 0.85);
     }
-    .versions {
-      list-style: none;
+    .stages {
       margin-top: 22px;
       width: 100%;
-      text-align: left;
-      border: 1.5px solid var(--ink);
-      border-radius: 16px;
-      padding: 4px 16px;
-    }
-    .versions li {
       display: flex;
+      flex-direction: column;
+      gap: 18px;
+      text-align: left;
+    }
+    .stage-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
       gap: 12px;
-      align-items: flex-start;
-      padding: 14px 0;
-      border-top: 1px solid var(--line);
+      font-size: 0.95rem;
     }
-    .versions li:first-child { border-top: 0; }
-    .box {
-      flex: 0 0 22px;
-      width: 22px;
-      height: 22px;
-      margin-top: 1px;
+    .stage-name { font-weight: 650; }
+    .stage-state { font-size: 0.75rem; font-weight: 500; color: rgba(32, 32, 34, 0.7); }
+    .stage-bar {
+      margin-top: 8px;
+      height: 12px;
       border: 1.5px solid var(--ink);
-      border-radius: 6px;
-      display: grid;
-      place-items: center;
-      font-size: 14px;
-      font-weight: 700;
-      line-height: 1;
+      border-radius: 999px;
+      background: rgba(32, 32, 34, 0.08);
+      overflow: hidden;
     }
-    .box.on { background: var(--ink); color: var(--field); }
-    .ver-title { font-size: 0.95rem; font-weight: 650; }
-    .ver-tag { font-size: 0.75rem; font-weight: 500; color: rgba(32, 32, 34, 0.7); margin-left: 4px; }
-    .ver-desc { margin-top: 3px; font-size: 0.85rem; line-height: 1.45; color: rgba(32, 32, 34, 0.8); }
+    .stage-bar i { display: block; height: 100%; width: 0%; background: var(--ink); border-radius: 999px; }
+    .stage.done .stage-bar i { width: 100%; }
+    .stage.soon .stage-bar { border-style: dashed; background: none; }
+    .stage-desc { margin-top: 6px; font-size: 0.85rem; line-height: 1.45; color: rgba(32, 32, 34, 0.8); }
     .gate .support-btn-gate { margin-top: 24px; width: 100%; }
     .gate .btn { width: 100%; white-space: nowrap; padding: 0 20px; }
     .gate #downloadBtn { margin-top: 12px; }
@@ -277,29 +272,23 @@
         Without consistent support, I may not be able to continue this project.
         A contribution helps cover development costs and keeps the work going.
       </p>
-      <ul class="versions" aria-label="Version status">
-        <li>
-          <span class="box on" aria-label="Completed">&#10003;</span>
-          <div>
-            <div class="ver-title">v1 <span class="ver-tag">Completed · Available now</span></div>
-            <div class="ver-desc">Guns and operators, all unlocked. Multiplayer matches with bots.</div>
-          </div>
-        </li>
-        <li>
-          <span class="box" aria-label="Not completed"></span>
-          <div>
-            <div class="ver-title">v2 <span class="ver-tag">Not completed</span></div>
-            <div class="ver-desc">Private matches and Battle Royale modes. Development proceeds only if funding is reached.</div>
-          </div>
-        </li>
-        <li>
-          <span class="box" aria-label="Coming soon"></span>
-          <div>
-            <div class="ver-title">v3 <span class="ver-tag">Coming soon</span></div>
-            <div class="ver-desc">May include maps ported from Modern Warfare (2019), Modern Warfare 2, Modern Warfare 3 and Black Ops 6.</div>
-          </div>
-        </li>
-      </ul>
+      <div class="stages" aria-label="Version progress">
+        <div class="stage done">
+          <div class="stage-top"><span class="stage-name">v1</span><span class="stage-state">Completed · Available now</span></div>
+          <div class="stage-bar" role="img" aria-label="v1 complete"><i></i></div>
+          <div class="stage-desc">Guns and operators, all unlocked. Multiplayer matches with bots.</div>
+        </div>
+        <div class="stage todo">
+          <div class="stage-top"><span class="stage-name">v2</span><span class="stage-state">Not completed</span></div>
+          <div class="stage-bar" role="img" aria-label="v2 not started"><i></i></div>
+          <div class="stage-desc">Private matches and Battle Royale modes. Development proceeds only if funding is reached.</div>
+        </div>
+        <div class="stage soon">
+          <div class="stage-top"><span class="stage-name">v3</span><span class="stage-state">Coming soon</span></div>
+          <div class="stage-bar" role="img" aria-label="v3 coming soon"><i></i></div>
+          <div class="stage-desc">May include maps ported from Modern Warfare (2019), Modern Warfare 2, Modern Warfare 3 and Black Ops 6.</div>
+        </div>
+      </div>
       <div class="support-gate-wrap support-btn-gate">
         <a class="btn" href="https://buymeacoffee.com/pixelgamer4k" target="_blank" rel="noopener noreferrer">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 8h1a4 4 0 0 1 0 8h-1M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8zM6 2v3M10 2v3M14 2v3"/></svg>
