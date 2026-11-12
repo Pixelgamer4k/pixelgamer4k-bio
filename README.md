@@ -14,10 +14,7 @@ Static brand bio website for **Pixel Gamer 4k**, hosted on GitHub Pages.
   - X (Main): [@4k_isn](https://x.com/4k_isn)
   - X (Alt): [@isn_8k](https://x.com/isn_8k)
   - Business Email: [pixelgamer4kris@gmail.com](mailto:pixelgamer4kris@gmail.com)
-- **Crypto Support Drawer**: One-tap copy for receive-only wallet addresses:
-  - **Ethereum (ETH)**: `0x85aFd0461985c25f2D1B218fbA9eC64f48A5A80A`
-  - **Bitcoin (BTC)**: `bc1qk07wsu5dd3e73g633w7um39qfdmfkrjlsz279j`
-  - **Solana (SOL)**: `FuWaM9KQ8efAxwp28sZETYEy6b85b22VGzP3ptxUsMKi`
+- **Support**: [Buy Me a Coffee](https://buymeacoffee.com/pixelgamer4k)
 - **Audio Controls**: Mute toggle for background brand music.
 
 ## Privacy & Performance
