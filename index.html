@@ -136,6 +136,57 @@
     }
 
     .dl-wrap { margin-top: 14px; width: 100%; }
+
+    .gate {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: var(--field);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: max(24px, env(safe-area-inset-top)) 22px max(24px, env(safe-area-inset-bottom));
+      overflow-y: auto;
+    }
+    .gate[hidden] { display: none; }
+    .gate-inner {
+      width: min(400px, 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .gate-logo {
+      width: min(230px, 62vw);
+      height: auto;
+      border-radius: 14px;
+      box-shadow: 0 10px 0 rgba(32, 32, 34, 0.08);
+    }
+    .gate h2 {
+      margin-top: 24px;
+      font-size: 1.15rem;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+    }
+    .gate p {
+      margin-top: 12px;
+      font-size: 0.92rem;
+      line-height: 1.55;
+      color: var(--ink-soft);
+    }
+    .gate .btn + .btn { margin-top: 12px; }
+    .gate .support-btn-gate { margin-top: 24px; }
+    .gate-back {
+      margin-top: 18px;
+      border: 0;
+      background: none;
+      color: var(--ink-soft);
+      font: inherit;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
   </style>
 </head>
 <body>
@@ -176,11 +227,33 @@
     </section>
 
     <div class="dl-wrap">
-      <a class="btn" id="downloadBtn" href="https://pastebin.com/HRwFBF9s" target="_blank" rel="noopener noreferrer">
+      <button class="btn" id="downloadTrigger" type="button" aria-haspopup="dialog" aria-controls="gate">
         Download
-      </a>
+      </button>
     </div>
   </main>
+
+  <div class="gate" id="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle" hidden>
+    <div class="gate-inner">
+      <img class="gate-logo" src="assets/warzone-mobile.png" alt="Call of Duty: Warzone Mobile" />
+      <h2 id="gateTitle">Before you download</h2>
+      <p>
+        Developing WZM Offline has taken a significant share of my personal budget.
+        Without consistent support, I may not be able to continue this project.
+        A contribution helps cover development costs and keeps the work going.
+      </p>
+      <div class="support-gate-wrap support-btn-gate">
+        <a class="btn" href="https://buymeacoffee.com/pixelgamer4k" target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 8h1a4 4 0 0 1 0 8h-1M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8zM6 2v3M10 2v3M14 2v3"/></svg>
+          Buy Me a Coffee
+        </a>
+      </div>
+      <a class="btn" id="downloadBtn" href="https://pastebin.com/HRwFBF9s" target="_blank" rel="noopener noreferrer">
+        Proceed to download
+      </a>
+      <button class="gate-back" id="gateClose" type="button">Back</button>
+    </div>
+  </div>
 
   <script>
     (function () {
@@ -192,6 +265,27 @@
       document.querySelector(".fund-track").setAttribute("aria-valuenow", raised);
       document.querySelector(".fund-track").setAttribute("aria-valuemax", goal);
       document.getElementById("fundText").textContent = "$" + raised + " of $" + goal;
+
+      var gate = document.getElementById("gate");
+      var trigger = document.getElementById("downloadTrigger");
+      var closeBtn = document.getElementById("gateClose");
+
+      function openGate() {
+        gate.hidden = false;
+        document.body.style.overflow = "hidden";
+        var first = gate.querySelector("a.btn");
+        if (first) first.focus();
+      }
+      function closeGate() {
+        gate.hidden = true;
+        document.body.style.overflow = "";
+        trigger.focus();
+      }
+      trigger.addEventListener("click", openGate);
+      closeBtn.addEventListener("click", closeGate);
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && !gate.hidden) closeGate();
+      });
     })();
   </script>
 </body>
