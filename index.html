@@ -9,7 +9,8 @@
     :root {
       --field: #FEDD04;
       --ink: #202022;
-      --ink-soft: rgba(32, 32, 34, 0.58);
+      --ink-soft: rgba(32, 32, 34, 0.62);
+      --ink-body: rgba(32, 32, 34, 0.86);
       --line: rgba(32, 32, 34, 0.16);
       --ease: cubic-bezier(0.22, 1, 0.36, 1);
     }
@@ -24,6 +25,7 @@
     }
     body { min-height: 100dvh; }
 
+    /* ---------- Main bio page ---------- */
     .bio {
       width: min(400px, 100%);
       margin: 0 auto;
@@ -72,11 +74,10 @@
     .social svg { width: 22px; height: 22px; fill: currentColor; }
     .social[aria-label="Email"] svg { width: 20px; height: 20px; }
 
-    .support-wrap { margin-top: 16px; width: 100%; }
     .btn {
       width: 100%;
-      text-decoration: none;
       min-height: 54px;
+      padding: 0 20px;
       border-radius: 999px;
       border: 1.5px solid var(--ink);
       background: transparent;
@@ -84,7 +85,9 @@
       font: inherit;
       font-weight: 650;
       font-size: 0.95rem;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.04em;
+      text-decoration: none;
+      white-space: nowrap;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -94,7 +97,11 @@
     }
     .btn:hover { background: rgba(32, 32, 34, 0.05); }
     .btn:active { transform: scale(0.985); }
-    .btn svg { width: 18px; height: 18px; }
+    .btn svg { width: 18px; height: 18px; flex: 0 0 18px; }
+    .btn.solid { background: var(--ink); color: var(--field); }
+    .btn.solid:hover { background: #000; }
+
+    .support-wrap { margin-top: 28px; width: 100%; }
 
     .fund {
       margin-top: 22px;
@@ -131,12 +138,15 @@
     }
     .fund-note {
       margin-top: 10px;
-      font-size: 0.78rem;
+      font-size: 0.8rem;
+      line-height: 1.45;
       color: var(--ink-soft);
     }
+    .fund .support-wrap { margin-top: 14px; }
 
     .dl-wrap { margin-top: 14px; width: 100%; }
 
+    /* ---------- Download notice panel ---------- */
     .gate {
       position: fixed;
       inset: 0;
@@ -145,83 +155,128 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: max(24px, env(safe-area-inset-top)) 22px max(24px, env(safe-area-inset-bottom));
+      padding: max(28px, env(safe-area-inset-top)) 22px max(28px, env(safe-area-inset-bottom));
       overflow-y: auto;
     }
     .gate[hidden] { display: none; }
     .gate-inner {
-      width: min(400px, 100%);
+      width: 100%;
+      max-width: 440px;
+      min-width: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
       text-align: center;
     }
     .gate-logo {
-      width: min(230px, 62vw);
+      width: min(190px, 52vw);
       height: auto;
       border-radius: 14px;
       box-shadow: 0 10px 0 rgba(32, 32, 34, 0.08);
     }
     .gate h2 {
-      margin-top: 24px;
-      font-size: 1.15rem;
-      font-weight: 650;
-      letter-spacing: 0.02em;
-    }
-    .gate p {
-      margin-top: 12px;
-      font-size: 0.95rem;
-      line-height: 1.55;
-      color: rgba(32, 32, 34, 0.85);
-    }
-    .stages {
       margin-top: 22px;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    .gate-msg {
+      margin-top: 10px;
+      font-size: 0.93rem;
+      line-height: 1.6;
+      color: var(--ink-body);
+      max-width: 40ch;
+    }
+
+    .stages {
       width: 100%;
+      margin-top: 22px;
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 12px;
       text-align: left;
     }
-    .stage-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 12px;
-      font-size: 0.95rem;
+    .stage {
+      border: 1.5px solid var(--ink);
+      border-radius: 16px;
+      padding: 14px 16px 15px;
     }
-    .stage-name { font-weight: 650; }
-    .stage-fund { position: relative; height: 24px; }
-    .stage-fund > i { background: rgba(32, 32, 34, 0.35); }
-    .bar-label {
-      position: absolute;
-      inset: 0;
+    .stage-head {
       display: flex;
       align-items: center;
-      justify-content: center;
-      font-size: 0.75rem;
-      font-weight: 650;
-      white-space: nowrap;
-      font-variant-numeric: tabular-nums;
-      pointer-events: none;
+      justify-content: space-between;
+      gap: 10px;
     }
-    .stage-state { font-size: 0.75rem; font-weight: 500; color: rgba(32, 32, 34, 0.7); }
-    .stage-bar {
-      margin-top: 8px;
-      height: 12px;
+    .stage-name {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    .stage-state {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1.2px solid var(--ink);
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+    .stage.done .stage-state { background: var(--ink); color: var(--field); }
+    .stage.todo .stage-state { background: transparent; }
+    .stage.soon .stage-state { border-style: dashed; }
+
+    .stage-row {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .track {
+      flex: 1;
+      min-width: 0;
+      height: 10px;
       border: 1.5px solid var(--ink);
       border-radius: 999px;
       background: rgba(32, 32, 34, 0.08);
       overflow: hidden;
     }
-    .stage-bar i { display: block; height: 100%; width: 0%; background: var(--ink); border-radius: 999px; }
-    .stage.done .stage-bar i { width: 100%; }
-    .stage.soon .stage-bar { border-style: dashed; background: none; }
-    .stage-desc { margin-top: 6px; font-size: 0.85rem; line-height: 1.45; color: rgba(32, 32, 34, 0.8); }
-    .gate .support-btn-gate { margin-top: 24px; width: 100%; }
-    .gate .btn { width: 100%; white-space: nowrap; padding: 0 20px; }
-    .gate #downloadBtn { margin-top: 12px; }
+    .track > i {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: var(--ink);
+      border-radius: 999px;
+    }
+    .stage.done .track > i { width: 100%; }
+    .stage.soon .track { border-style: dashed; background: none; }
+    .amount {
+      flex: 0 0 auto;
+      min-width: 0;
+      text-align: right;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .stage-desc {
+      margin-top: 11px;
+      font-size: 0.86rem;
+      line-height: 1.5;
+      color: var(--ink-body);
+    }
+
+    .gate-actions {
+      width: 100%;
+      margin-top: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
     .gate-back {
-      margin-top: 18px;
+      margin-top: 4px;
       border: 0;
       background: none;
       color: var(--ink-soft);
@@ -281,41 +336,60 @@
     <div class="gate-inner">
       <img class="gate-logo" src="assets/warzone-mobile.png" alt="Call of Duty: Warzone Mobile" />
       <h2 id="gateTitle">Before you download</h2>
-      <p>
+      <p class="gate-msg">
         Developing WZM Offline has taken a significant share of my personal budget.
         Without consistent support, I may not be able to continue this project.
         A contribution helps cover development costs and keeps the work going.
       </p>
+
       <div class="stages" aria-label="Version progress">
         <div class="stage done">
-          <div class="stage-top"><span class="stage-name">v1</span><span class="stage-state">Completed · Available now</span></div>
-          <div class="stage-bar" role="img" aria-label="v1 complete"><i></i></div>
+          <div class="stage-head">
+            <span class="stage-name">v1</span>
+            <span class="stage-state">Completed</span>
+          </div>
+          <div class="stage-row">
+            <div class="track" role="img" aria-label="v1 complete"><i></i></div>
+            <span class="amount">Available now</span>
+          </div>
           <div class="stage-desc">Guns and operators, all unlocked. Multiplayer matches with bots.</div>
         </div>
+
         <div class="stage todo">
-          <div class="stage-top"><span class="stage-name">v2</span><span class="stage-state">Not completed</span></div>
-          <div class="stage-bar stage-fund" role="img" aria-label="v2 funding progress">
-            <i id="miniBar"></i>
-            <span class="bar-label" id="miniText">$17 of $200</span>
+          <div class="stage-head">
+            <span class="stage-name">v2</span>
+            <span class="stage-state">Not completed</span>
+          </div>
+          <div class="stage-row">
+            <div class="track" role="img" aria-label="v2 funding progress"><i id="miniBar"></i></div>
+            <span class="amount" id="miniText">$17 of $200</span>
           </div>
           <div class="stage-desc">Private matches and Battle Royale modes. Development proceeds only if funding is reached.</div>
         </div>
+
         <div class="stage soon">
-          <div class="stage-top"><span class="stage-name">v3</span><span class="stage-state">Coming soon</span></div>
-          <div class="stage-bar" role="img" aria-label="v3 coming soon"><i></i></div>
+          <div class="stage-head">
+            <span class="stage-name">v3</span>
+            <span class="stage-state">Coming soon</span>
+          </div>
+          <div class="stage-row">
+            <div class="track" role="img" aria-label="v3 coming soon"><i></i></div>
+            <span class="amount">Planned</span>
+          </div>
           <div class="stage-desc">May include maps ported from Modern Warfare (2019), Modern Warfare 2, Modern Warfare 3 and Black Ops 6.</div>
         </div>
       </div>
-      <div class="support-gate-wrap support-btn-gate">
+
+      <div class="gate-actions">
         <a class="btn" href="https://buymeacoffee.com/pixelgamer4k" target="_blank" rel="noopener noreferrer">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 8h1a4 4 0 0 1 0 8h-1M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8zM6 2v3M10 2v3M14 2v3"/></svg>
           Buy Me a Coffee
         </a>
+        <a class="btn solid" id="downloadBtn" href="https://pastebin.com/HRwFBF9s" target="_blank" rel="noopener noreferrer">
+          Download v1
+        </a>
+        <button class="gate-back" id="gateClose" type="button">Back</button>
       </div>
-      <a class="btn" id="downloadBtn" href="https://pastebin.com/HRwFBF9s" target="_blank" rel="noopener noreferrer">
-        Download v1
-      </a>
-      <button class="gate-back" id="gateClose" type="button">Back</button>
     </div>
   </div>
 
@@ -325,12 +399,16 @@
       var raised = Number(fund.dataset.raised) || 0;
       var goal = Number(fund.dataset.goal) || 1;
       var pct = Math.min(100, Math.max(0, (raised / goal) * 100));
+      var label = "$" + raised + " of $" + goal;
+
       document.getElementById("fundBar").style.width = pct.toFixed(1) + "%";
-      document.querySelector(".fund-track").setAttribute("aria-valuenow", raised);
-      document.querySelector(".fund-track").setAttribute("aria-valuemax", goal);
-      document.getElementById("fundText").textContent = "$" + raised + " of $" + goal;
+      document.getElementById("fundText").textContent = label;
+      var track = document.querySelector(".fund-track");
+      track.setAttribute("aria-valuenow", raised);
+      track.setAttribute("aria-valuemax", goal);
+
       document.getElementById("miniBar").style.width = pct.toFixed(1) + "%";
-      document.getElementById("miniText").textContent = "$" + raised + " of $" + goal;
+      document.getElementById("miniText").textContent = label;
 
       var gate = document.getElementById("gate");
       var trigger = document.getElementById("downloadTrigger");
